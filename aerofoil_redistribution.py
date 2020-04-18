@@ -25,7 +25,7 @@ def do_code():
 
     # make and read files & folders
     print_data.mkdir(exist_ok=True)
-    aerofoils = [file for file in os.listdir(root_dir) if 'csv' in file] # add if os.path.isfile(file)
+    aerofoils = [file for file in os.listdir(root_dir) if 'csv' in file if os.path.isfile(root_dir / file)]
 
     # get x coordinates of chosen file
     coordinates = np.loadtxt(root_dir / chosen_aerofoil_x, delimiter=' ', dtype=np.float32, skiprows=1)  # output is np array

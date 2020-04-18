@@ -23,7 +23,7 @@ class AerofoilDataset(Dataset):
     def __init__(self, root_dir, max_clcld_fname):
         """data loading"""
         self.root_dir = root_dir
-        self.aerofoil_fnames = [file for file in os.listdir(root_dir) if not max_clcld_fname in file]
+        self.aerofoil_fnames = [file for file in os.listdir(root_dir) if 'csv' in file]
 
 
     def __getitem__(self, item):
