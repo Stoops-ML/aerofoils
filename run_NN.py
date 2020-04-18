@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 from pathlib import Path
+import re
 import sys
 
 
@@ -12,7 +13,8 @@ class AerofoilDataset(Dataset):
     def __init__(self, root_dir):
         """data loading"""
         self.root_dir = Path(root_dir)
-        self.aerofoils = [file for file in os.listdir(root_dir) if 'csv' in file
+        self.aerofoils = [file for file in os.listdir(root_dir)
+                          if re.search(r"(.csv)$", file)
                           if os.path.isfile(root_dir / file)]
 
     def __getitem__(self, item):
@@ -20,10 +22,9 @@ class AerofoilDataset(Dataset):
         if torch.is_tensor(item):
             item = item.tolist()
 
-        aerofoil_name = os.listdir(self.root_dir)[item]
-        coords = np.loadtxt(self.root_dir / aerofoil_name, dtype=np.float32)  # no header in file, delimiter is space
-
-        sample = {"aerofoil": aerofoil_name, "coordiantes": coords}
+        # read data (saves memory by not reading data in __init__)
+        coords = np.loadtxt(self.root_dir / self.aerofoils[item], dtype=np.float32)  # no header in file
+        sample = {"aerofoil": self.aerofoils[item], "coordinates": coords}
 
         return sample
 
@@ -32,12 +33,30 @@ class AerofoilDataset(Dataset):
         return len(self.aerofoils)
 
 
-def show_aerofoil(aerofoil, coordiantes):
+def show_aerofoil(aerofoil, coordinates):
     """show plot of aerofoil"""
-    plt.plot(coordiantes[:, 0], coordiantes[:, 1], 'r-')
+    plt.plot(coordinates[:, 0], coordinates[:, 1], 'r-')
     plt.title(aerofoil)
     plt.show()
 
+
+def show_aerofoil_batch(sample_batched):
+    """show plot of aerofoils for a batch of samples."""
+    aerofoils_batch, coordinates_batch = sample_batched['aerofoil'], sample_batched['coordinates']
+    batch_size = len(aerofoils_batch)
+
+    fig = plt.figure()
+    for i, (aerofoil, coords) in enumerate(zip(aerofoils_batch, coordinates_batch)):
+        ax = fig.add_subplot(1, batch_size, i+1)
+        ax.plot(coords[:, 0], coords[:, 1], 'r-')
+        ax.title.set_text(aerofoil)
+
+    plt.suptitle('Batch from dataloader')
+    plt.show()
+
+
+# file configuration
+path = Path(__file__).parent
 
 # device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -48,10 +67,12 @@ hidden_size = 100
 num_epochs = 2
 batch_size = 4
 learning_rate = 0.001
-path = Path(__file__).parent
 
 # import dataset
-train_dataset = AerofoilDataset(path / 'data' / 'out')
-show_aerofoil(**train_dataset[0])
+train_dataset = AerofoilDataset(path / 'data' / 'out')  # NO TRANSFORMS DONE ON DATASET
+# show_aerofoil(**train_dataset[0])
 
-
+# dataloader
+dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True, num_workers=4)
+# for batch in dataloader:
+#     show_aerofoil_batch(batch)
