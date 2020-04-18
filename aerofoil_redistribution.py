@@ -7,19 +7,19 @@ from random import seed
 from random import random
 
 # parameters
-seed(42)
+seed(1)
 train_valid_split = 0.7  # percentage to split train and validation set randomly
 root_dir = Path('data')
-print_data = root_dir / 'out'
+in_files = root_dir / 'downloaded_files'
+out_files = root_dir / 'out'
 chosen_aerofoil_x = 'NACA_0009.csv'  # use x coordinates of this file for all other files
 
 # make folders
-print_data.mkdir(exist_ok=True)
-train_set = print_data / 'train'
-valid_set = print_data / 'valid'
+out_files.mkdir(exist_ok=True)
+train_set = out_files / 'train'
+valid_set = out_files / 'valid'
 train_set.mkdir(exist_ok=True)
 valid_set.mkdir(exist_ok=True)
-
 
 def start_code():
     strings2print = [f" ",
@@ -33,15 +33,21 @@ def start_code():
     print("#"*spacing)
     print()
 
+    # TODO: make this check more robust
+    if len(os.listdir(train_set)) > 0:
+        print("TRAIN SET DIRECTORY NOT EMPTY!!!! FILES WILL BE OVERWRITTEN OR ADDED IF SEED HAS CHANGED!")
+    if len(os.listdir(valid_set)) > 0:
+        print("VALIDATION SET DIRECTORY NOT EMPTY!!!! FILES WILL BE OVERWRITTEN OR ADDED IF SEED HAS CHANGED!")
+
 
 def do_code():
     # make and read files & folders
-    aerofoils = [file for file in os.listdir(root_dir)
+    aerofoils = [file for file in os.listdir(in_files)
                  if re.search(r"(.csv)$", file)
-                 if os.path.isfile(root_dir / file)]
+                 if os.path.isfile(in_files / file)]
 
     # get x coordinates of chosen file
-    coordinates = np.loadtxt(root_dir / chosen_aerofoil_x, delimiter=' ', dtype=np.float32, skiprows=1)  # output is np array
+    coordinates = np.loadtxt(in_files / chosen_aerofoil_x, delimiter=' ', dtype=np.float32, skiprows=1)  # output is np array
     x_target = coordinates[:, 0]
     x_target_half = x_target[len(x_target) // 2:]  # x target is symmetrical top and bottom
 
@@ -51,7 +57,7 @@ def do_code():
             continue  # no need to interpolate chosen aerofoil
         try:
             # TODO: change reading of file to regular expression so as to avoid issues with the delimiter
-            coordinates = np.loadtxt(root_dir / aerofoil, delimiter=' ', dtype=np.float32, skiprows=1)
+            coordinates = np.loadtxt(in_files / aerofoil, delimiter=' ', dtype=np.float32, skiprows=1)
             y_coord = coordinates[:, 1]
             x_coord = coordinates[:, 0]
             x_top = np.append(x_coord[len(y_coord) // 2:0:-1], x_coord[0])
@@ -79,7 +85,7 @@ def do_code():
             print(f"Error in file {aerofoil}. File ignored.\n"
                   f"Error: {exc}.\n")
 
-    print(f"Code finished. Output folder: {print_data}.\n"
+    print(f"Code finished. Output folder: {out_files}.\n"
           f"Number of coordinates in every aerofoil file: {len(y_target)}")
 
 
