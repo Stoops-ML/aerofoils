@@ -1,7 +1,24 @@
 import numpy as np
 from pathlib import Path
 import os
+import re
 import matplotlib.pyplot as plt
+from random import seed
+from random import random
+
+# parameters
+seed(42)
+train_valid_split = 0.7  # percentage to split train and validation set randomly
+root_dir = Path('data')
+print_data = root_dir / 'out'
+chosen_aerofoil_x = 'NACA_0009.csv'  # use x coordinates of this file for all other files
+
+# make folders
+print_data.mkdir(exist_ok=True)
+train_set = print_data / 'train'
+valid_set = print_data / 'valid'
+train_set.mkdir(exist_ok=True)
+valid_set.mkdir(exist_ok=True)
 
 
 def start_code():
@@ -18,14 +35,11 @@ def start_code():
 
 
 def do_code():
-    # parameters
-    root_dir = Path('data')
-    print_data = root_dir / 'out'
-    chosen_aerofoil_x = 'NACA_0009.csv'  # use x coordinates of this file for all other files
-
     # make and read files & folders
-    print_data.mkdir(exist_ok=True)
-    aerofoils = [file for file in os.listdir(root_dir) if 'csv' in file if os.path.isfile(root_dir / file)]
+    aerofoils = [file for file in os.listdir(root_dir)
+                 if re.search(r"(.csv)$", file)
+                 if os.path.isfile(root_dir / file)]
+    print(f"Aerofoils: {aerofoils}")
 
     # get x coordinates of chosen file
     coordinates = np.loadtxt(root_dir / chosen_aerofoil_x, delimiter=' ', dtype=np.float32, skiprows=1)  # output is np array
@@ -49,14 +63,21 @@ def do_code():
             y_top_target = np.interp(x_target_half, x_top, y_top)
             y_target = np.append(y_top_target[:0:-1], y_bottom_target)  # remove one of the two zeros
 
-            np.savetxt(print_data / aerofoil, np.c_[x_target, y_target], fmt='%.4f')
+            # print file
+            if random() > train_valid_split:
+                # move file to validation set
+                np.savetxt(valid_set / aerofoil, np.c_[x_target, y_target], fmt='%.4f')
+            else:
+                # move file to train set
+                np.savetxt(train_set / aerofoil, np.c_[x_target, y_target], fmt='%.4f')
 
             # plt.plot(x_coord, y_coord, 'r-')
             # plt.plot(x_target, y_target, 'bo')
             # plt.show()
 
-        except Exception:  # as exc
-            print(f"Error in file {aerofoil}. File ignored.")
+        except Exception as exc:
+            print(f"Error in file {aerofoil}. File ignored.\n"
+                  f"Error: {exc}.\n")
 
     print(f"Code finished. Output folder: {print_data}.\n"
           f"Number of coordinates in every aerofoil file: {len(y_target)}")
