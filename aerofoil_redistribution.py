@@ -39,7 +39,6 @@ def do_code():
     aerofoils = [file for file in os.listdir(root_dir)
                  if re.search(r"(.csv)$", file)
                  if os.path.isfile(root_dir / file)]
-    print(f"Aerofoils: {aerofoils}")
 
     # get x coordinates of chosen file
     coordinates = np.loadtxt(root_dir / chosen_aerofoil_x, delimiter=' ', dtype=np.float32, skiprows=1)  # output is np array
