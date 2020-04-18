@@ -25,8 +25,14 @@ class AerofoilDataset(Dataset):
             item = item.tolist()
 
         # read data (saves memory by not reading data in __init__)
-        coords = np.loadtxt(self.root_dir / self.aerofoils[item], dtype=np.float32)  # no header in file
-        sample = {"aerofoil": self.aerofoils[item], "coordinates": coords}
+        coords = np.loadtxt(self.root_dir / self.aerofoils[item], dtype=np.float32, skiprows=1)
+        with open(self.root_dir / self.aerofoils[item]) as f:
+            obj = re.search(r'.*(\d+).*(\d+).*', f.read())  # read first line: max ClCd, angle
+            max_ClCd, angle = float(obj.group(1)), float(obj.group(2))
+
+        # TODO: coordinates of sample is redundant (we have x for this). Remove and update other classes
+        sample = {"aerofoil": self.aerofoils[item], "coordinates": coords,
+                  "x": np.append(coords[:, 0], coords[:, 1]), "y": [max_ClCd, angle]}
 
         if self.transform:
             sample = self.transform(sample)
@@ -38,14 +44,14 @@ class AerofoilDataset(Dataset):
         return len(self.aerofoils)
 
 
-def show_aerofoil(aerofoil, coordinates):
+def show_aerofoil(**kwargs):
     """show plot of aerofoil"""
-    plt.plot(coordinates[:, 0], coordinates[:, 1], 'r-')
-    plt.title(aerofoil)
+    plt.plot(kwargs["coordinates"][:, 0], kwargs["coordinates"][:, 1], 'r-')
+    plt.title(kwargs["aerofoil"])
     plt.show()
 
 
-def show_aerofoil_batch(sample_batched, batch_num):
+def show_aerofoil_batch(batch_num, **sample_batched):
     """show plot of aerofoils for a batch of samples."""
     aerofoils_batch, coordinates_batch = sample_batched['aerofoil'], sample_batched['coordinates']
     batch_size = len(aerofoils_batch)
@@ -64,7 +70,9 @@ class ToTensor(object):
     """convert ndarrays in sample to Tensors."""
 
     def __call__(self, sample): return {'aerofoil': sample['aerofoil'],
-                                        'coordinates': torch.from_numpy(sample['coordinates'])}
+                                        'coordinates': torch.from_numpy(sample['coordinates']),
+                                        'x': torch.FloatTensor(sample['x']),
+                                        'y': torch.FloatTensor(sample['y'])}
 
 
 # file configuration
@@ -77,7 +85,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 input_size = 69  # number of coordinates of x,y in all aerofoils
 hidden_size = 100
 num_epochs = 2
-batch_size = 4
+bs = 4
 learning_rate = 0.001
 
 # import dataset
@@ -87,7 +95,8 @@ train_dataset = AerofoilDataset(path / 'data' / 'out' / 'train', transform=trans
 valid_dataset = AerofoilDataset(path / 'data' / 'out' / 'valid')
 # show_aerofoil(**train_dataset[0])
 
-# dataloader
-dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True, num_workers=4)
-for i, batch in enumerate(dataloader):
-    show_aerofoil_batch(batch, i)
+# dataloaders
+train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True, num_workers=4)
+valid_loader = DataLoader(valid_dataset, batch_size=bs, shuffle=True, num_workers=4)
+# for i, batch in enumerate(dataloader):
+#     show_aerofoil_batch(i, **batch)
