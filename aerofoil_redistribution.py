@@ -50,6 +50,7 @@ def do_code():
         if aerofoils == chosen_aerofoil_x:
             continue  # no need to interpolate chosen aerofoil
         try:
+            # TODO: change reading of file to regular expression so as to avoid issues with the delimiter
             coordinates = np.loadtxt(root_dir / aerofoil, delimiter=' ', dtype=np.float32, skiprows=1)
             y_coord = coordinates[:, 1]
             x_coord = coordinates[:, 0]
