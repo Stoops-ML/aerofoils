@@ -2,7 +2,6 @@ import numpy as np
 from pathlib import Path
 import os
 import matplotlib.pyplot as plt
-import sys
 
 
 def start_code():
