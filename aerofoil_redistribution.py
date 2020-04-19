@@ -14,15 +14,16 @@ train_valid_split = 0.8  # percentage to split train and validation set randomly
 root_dir = Path('data')
 in_files = root_dir / 'downloaded_files'
 out_files = root_dir / 'out'
-chosen_aerofoil_x = 'NACA_0009.csv'  # use x coordinates of this file for all other files
+chosen_aerofoil_x = 'NACA_24112.csv'  # use x coordinates of this file for all other files
 
 # make folders
 shutil.rmtree(out_files)  # delete all previous outputs
 out_files.mkdir(exist_ok=True)
 train_set = out_files / 'train'
-valid_set = out_files / 'valid'
+test_set = out_files / 'test'
 train_set.mkdir(exist_ok=True)
-valid_set.mkdir(exist_ok=True)
+test_set.mkdir(exist_ok=True)
+
 
 def start_code():
     strings2print = [f" ",
@@ -39,7 +40,7 @@ def start_code():
     # TODO: make this check more robust
     if len(os.listdir(train_set)) > 0:
         print("TRAIN SET DIRECTORY NOT EMPTY!!!! FILES WILL BE OVERWRITTEN OR ADDED IF SEED HAS CHANGED!")
-    if len(os.listdir(valid_set)) > 0:
+    if len(os.listdir(test_set)) > 0:
         print("VALIDATION SET DIRECTORY NOT EMPTY!!!! FILES WILL BE OVERWRITTEN OR ADDED IF SEED HAS CHANGED!")
 
 
@@ -50,8 +51,15 @@ def do_code():
                  if os.path.isfile(in_files / file)]
 
     # get x coordinates of chosen file
-    coordinates = np.loadtxt(in_files / chosen_aerofoil_x, delimiter=' ', dtype=np.float32, skiprows=2)  # output is np array
-    x_target = coordinates[:, 0]
+    x_target = []
+    with open(in_files / chosen_aerofoil_x) as f:
+        for i, line in enumerate(f):
+            if i <= 1:
+                continue  # skip first two lines of file
+            else:
+                xy = re.findall(r'[+-]?\d*[.]?\d*', line)
+                xy = [num for num in xy if num != '']
+                x_target.append(float(xy[0]))
     x_target_half = x_target[len(x_target) // 2:]  # x target is symmetrical top and bottom
 
     # make all aerofoils same size
@@ -93,7 +101,7 @@ def do_code():
             # print file
             if random() > train_valid_split:
                 # move file to validation set
-                out_dest = valid_set
+                out_dest = test_set
             else:
                 # move file to train set
                 out_dest = train_set
