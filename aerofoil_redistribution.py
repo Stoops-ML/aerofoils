@@ -66,9 +66,10 @@ def do_code():
                     if i <= 1:
                         continue  # skip first two lines of file
                     else:
-                        xy = re.search(r'\s*([+-]?\d*[.]?\d*)\s+([+-]?\d*[.]?\d*)', line)
-                        x_coord.append(float(xy.group(1)))
-                        y_coord.append(float(xy.group(2)))
+                        xy = re.findall(r'[+-]?\d*[.]?\d*', line)
+                        xy = [num for num in xy if num != '']
+                        x_coord.append(float(xy[0]))
+                        y_coord.append(float(xy[1]))
 
             x_top = np.append(x_coord[len(y_coord) // 2:0:-1], x_coord[0])
             x_bottom = x_coord[len(y_coord) // 2:]

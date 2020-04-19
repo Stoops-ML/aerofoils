@@ -30,12 +30,13 @@ class AerofoilDataset(Dataset):
             found_ClCd = False
             for line in f:
                 if re.search(r'ClCd', line):
-                    obj = re.search(r'\D*([+-]?\d*[.]?\d*)\D+([+-]?\d*[.]?\d*)', line)
+                    obj = re.findall(r'[+-]?\d*[.]?\d*', line)
+                    obj = [num for num in obj if num != '']
                     found_ClCd = True
                     break
             if not found_ClCd:
                 raise Exception(f"no Max ClCd & angle in file {self.aerofoils[item]}. Code ended")
-            max_ClCd, angle = float(obj.group(1)), float(obj.group(2))
+            max_ClCd, angle = float(obj[0]), float(obj[1])
 
         # TODO: coordinates of sample is redundant (we have x for this). Remove and update other classes
         sample = {"aerofoil": self.aerofoils[item], "coordinates": coords, "y": [max_ClCd, angle]}  #,
