@@ -27,7 +27,14 @@ class AerofoilDataset(Dataset):
         # read data (saves memory by not reading data in __init__)
         coords = np.loadtxt(self.root_dir / self.aerofoils[item], dtype=np.float32, skiprows=1)
         with open(self.root_dir / self.aerofoils[item]) as f:
-            obj = re.search(r'.*(\d+).*(\d+).*', f.read())  # read first line: max ClCd, angle
+            found_ClCd = False
+            for line in f:
+                if re.search(r'ClCd', line):
+                    obj = re.search(r'.*(\d+).*(\d+).*', line)
+                    found_ClCd = True
+                    break
+            if not found_ClCd:
+                raise Exception(f"no Max ClCd & angle in file {self.aerofoils[item]}. Code ended")
             max_ClCd, angle = float(obj.group(1)), float(obj.group(2))
 
         # TODO: coordinates of sample is redundant (we have x for this). Remove and update other classes
@@ -82,11 +89,14 @@ path = Path(__file__).parent
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # hyper parameters
-input_size = 69  # number of coordinates of x,y in all aerofoils
+input_size = 69*2  # number of coordinates of x,y in all aerofoils
 hidden_size = 100
 num_epochs = 2
 bs = 4
 learning_rate = 0.001
+
+# find input size
+
 
 # import dataset
 train_dataset = AerofoilDataset(path / 'data' / 'out' / 'train', transform=transforms.Compose([ToTensor()]))

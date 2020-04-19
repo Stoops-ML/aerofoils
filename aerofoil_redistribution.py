@@ -47,7 +47,7 @@ def do_code():
                  if os.path.isfile(in_files / file)]
 
     # get x coordinates of chosen file
-    coordinates = np.loadtxt(in_files / chosen_aerofoil_x, delimiter=' ', dtype=np.float32, skiprows=1)  # output is np array
+    coordinates = np.loadtxt(in_files / chosen_aerofoil_x, delimiter=' ', dtype=np.float32, skiprows=2)  # output is np array
     x_target = coordinates[:, 0]
     x_target_half = x_target[len(x_target) // 2:]  # x target is symmetrical top and bottom
 
@@ -57,7 +57,7 @@ def do_code():
             continue  # no need to interpolate chosen aerofoil
         try:
             # TODO: change reading of file to regular expression so as to avoid issues with the delimiter
-            coordinates = np.loadtxt(in_files / aerofoil, delimiter=' ', dtype=np.float32, skiprows=1)
+            coordinates = np.loadtxt(in_files / aerofoil, delimiter=' ', dtype=np.float32, skiprows=2)
             y_coord = coordinates[:, 1]
             x_coord = coordinates[:, 0]
             x_top = np.append(x_coord[len(y_coord) // 2:0:-1], x_coord[0])
@@ -69,13 +69,30 @@ def do_code():
             y_top_target = np.interp(x_target_half, x_top, y_top)
             y_target = np.append(y_top_target[:0:-1], y_bottom_target)  # remove one of the two zeros
 
+            with open(in_files / aerofoil) as f:
+                found_line = False
+                for line in f:
+                    if 'ClCd' in line:
+                        max_ClCd_angle = line
+                        found_line = True
+                        break
+                if not found_line:
+                    raise Exception("Max ClCd and angle not found in file")
+
             # print file
             if random() > train_valid_split:
                 # move file to validation set
-                np.savetxt(valid_set / aerofoil, np.c_[x_target, y_target], fmt='%.4f')
+                out_dest = valid_set
             else:
                 # move file to train set
-                np.savetxt(train_set / aerofoil, np.c_[x_target, y_target], fmt='%.4f')
+                out_dest = train_set
+
+            np.savetxt(out_dest / aerofoil, np.c_[x_target, y_target], fmt='%.4f')
+
+            with open(out_dest / aerofoil, 'a') as f:
+                f.write(max_ClCd_angle)
+
+
 
             # plt.plot(x_coord, y_coord, 'r-')
             # plt.plot(x_target, y_target, 'bo')
