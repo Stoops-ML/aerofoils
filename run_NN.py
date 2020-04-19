@@ -100,13 +100,13 @@ learning_rate = 0.001
 
 # import dataset
 train_dataset = AerofoilDataset(path / 'data' / 'out' / 'train', transform=transforms.Compose([ToTensor()]))
+valid_dataset = AerofoilDataset(path / 'data' / 'out' / 'valid', transform=transforms.Compose([ToTensor()]))
 # note: don't actually need to do the ToTensor transform because this is already done by the dataloader. It's needed for
 # images where you need to switch axes
-valid_dataset = AerofoilDataset(path / 'data' / 'out' / 'valid')
 # show_aerofoil(**train_dataset[0])
 
 # dataloaders
 train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True, num_workers=4)
 valid_loader = DataLoader(valid_dataset, batch_size=bs, shuffle=True, num_workers=4)
-# for i, batch in enumerate(dataloader):
-#     show_aerofoil_batch(i, **batch)
+for i, batch in enumerate(valid_loader):
+    show_aerofoil_batch(i, **batch)

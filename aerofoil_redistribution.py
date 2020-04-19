@@ -77,7 +77,7 @@ def do_code():
                         found_line = True
                         break
                 if not found_line:
-                    raise Exception("Max ClCd and angle not found in file")
+                    raise Exception("Max ClCd & angle not found in file")
 
             # print file
             if random() > train_valid_split:
@@ -87,10 +87,11 @@ def do_code():
                 # move file to train set
                 out_dest = train_set
 
-            np.savetxt(out_dest / aerofoil, np.c_[x_target, y_target], fmt='%.4f')
-
-            with open(out_dest / aerofoil, 'a') as f:
-                f.write(max_ClCd_angle)
+            with open(out_dest / aerofoil, 'w') as f:
+                f.write(f"{max_ClCd_angle}")
+                for x, y in zip(x_target, y_target):
+                    f.write(f"{x:.4f} {y:.4f}\n")
+                # np.savetxt(f, np.c_[x_target, y_target], fmt='%.4f')
 
 
 
