@@ -7,6 +7,7 @@ import os
 import numpy as np
 from pathlib import Path
 import re
+from tqdm import tqdm
 import sys
 
 
@@ -93,22 +94,27 @@ class ToTensor(object):
 path = Path(__file__).parent
 
 # device configuration
+torch.manual_seed(0)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # hyper parameters
-input_size = 69*2  # number of coordinates of x,y in all aerofoils
-output_size = 2  # max ClCd & angle
-hidden_size = 100
-num_epochs = 1000
-bs = 4
-learning_rate = 0.01
+hidden_layers = [300, 300, 300, 300, 300, 300, 300, 300]
+num_epochs = 10000
+bs = 10
+learning_rate = 0.001
+train_dir = path / 'data' / 'out' / 'train'
+test_dir = path / 'data' / 'out' / 'test'
 
-# TODO: find input and output size from files automatically
-
+# find input & output size
+input_file = os.listdir(train_dir)[0] if re.search(r"(.csv)$", os.listdir(train_dir)[0]) else os.listdir(train_dir)[1]
+with open(train_dir / input_file) as f:
+    obj = re.findall(r'[+-]?\d*[.]?\d*', f.readline())
+    input_size = sum(1 for _ in f) * 2
+output_size = len([num for num in obj if num != ''])
 
 # import dataset
-train_dataset = AerofoilDataset(path / 'data' / 'out' / 'train', transform=transforms.Compose([ToTensor()]))
-test_dataset = AerofoilDataset(path / 'data' / 'out' / 'valid', transform=transforms.Compose([ToTensor()]))
+train_dataset = AerofoilDataset(train_dir, transform=transforms.Compose([ToTensor()]))
+test_dataset = AerofoilDataset(test_dir, transform=transforms.Compose([ToTensor()]))
 # note: don't actually need to do the ToTensor transform because this is already done by the dataloader. It's needed for
 # images where you need to switch axes
 # show_aerofoil(**train_dataset[0])
@@ -124,9 +130,21 @@ class NeuralNet(nn.Module):
     def __init__(self, input_size, hidden_layers, num_outputs):
         super(NeuralNet, self).__init__()
         self.linear1 = nn.Linear(input_size, hidden_layers[0])
+        self.bn1 = nn.BatchNorm1d(num_features=hidden_layers[0])
         self.linear2 = nn.Linear(hidden_layers[0], hidden_layers[1])
+        self.bn2 = nn.BatchNorm1d(num_features=hidden_layers[1])
         self.linear3 = nn.Linear(hidden_layers[1], hidden_layers[2])
-        self.linear4 = nn.Linear(hidden_layers[2], num_outputs)
+        self.bn3 = nn.BatchNorm1d(num_features=hidden_layers[2])
+        self.linear4 = nn.Linear(hidden_layers[2], hidden_layers[3])
+        self.bn4 = nn.BatchNorm1d(num_features=hidden_layers[3])
+        self.linear5 = nn.Linear(hidden_layers[3], hidden_layers[4])
+        self.bn5 = nn.BatchNorm1d(num_features=hidden_layers[4])
+        self.linear6 = nn.Linear(hidden_layers[4], hidden_layers[5])
+        self.bn6 = nn.BatchNorm1d(num_features=hidden_layers[5])
+        self.linear7 = nn.Linear(hidden_layers[5], hidden_layers[6])
+        self.bn7 = nn.BatchNorm1d(num_features=hidden_layers[6])
+        self.linear8 = nn.Linear(hidden_layers[6], num_outputs)
+        self.bn8 = nn.BatchNorm1d(num_features=num_outputs)
         self.relu = nn.ReLU()
 
         # TODO: use nn.ModuleDict to iterate through layers
@@ -137,13 +155,17 @@ class NeuralNet(nn.Module):
         #         break
 
     def forward(self, x):
-        out = self.linear1(x)
-        out = self.relu(out)
-        out = self.linear2(out)
-        out = self.relu(out)
-        out = self.linear3(out)
-        out = self.relu(out)
-        out = self.linear4(out)
+        out = self.relu(self.bn1(self.linear1(x)))
+        out = self.relu(self.bn2(self.linear2(out)))
+        out = self.relu(self.bn3(self.linear3(out)))
+        out = self.relu(self.bn4(self.linear4(out)))
+        out = self.relu(self.bn5(self.linear5(out)))
+        out = self.relu(self.bn6(self.linear6(out)))
+        out = self.relu(self.bn7(self.linear7(out)))
+        out = self.bn8(self.linear8(out))
+
+        ClCd_batch = out[:, 0]
+        angle_batch = out[:, 1]
 
         # out = x
         # for i in range(len(self.nn_model)):
@@ -153,26 +175,29 @@ class NeuralNet(nn.Module):
         #         out = self.relu(out)
 
         # I think MSEloss() applies an activation function to the last layer itself
-        return out
+        return ClCd_batch, angle_batch
 
 
-hidden_layers = [hidden_size] * 4
-model = NeuralNet(input_size, hidden_layers, output_size)
+model = NeuralNet(input_size, hidden_layers, output_size).to(device)
 
 # loss and optimiser
-criterion = nn.MSELoss()
+criterion_ClCd = nn.MSELoss()
+criterion_angle = nn.MSELoss()
 optimiser = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
 # training loop
-for epoch in range(num_epochs):
+for epoch in tqdm(range(num_epochs)):
     for i, sample in enumerate(train_loader):
         # reshape input to column vector
         sample["coordinates"] = sample["coordinates"].reshape(-1, input_size).to(device)
-        sample["y"] = sample["y"].to(device)
+        ClCd_batch = sample["y"][:, 0].to(device)
+        angle_batch = sample["y"][:, 1].to(device)
 
         # forward pass
-        pred_output = model(sample["coordinates"])
-        loss = criterion(pred_output, sample["y"])
+        pred_ClCd, pred_angle = model(sample["coordinates"])
+        loss_ClCd = criterion_ClCd(pred_ClCd, ClCd_batch)
+        loss_angle = criterion_angle(pred_angle, angle_batch)
+        loss = loss_ClCd + loss_angle
 
         # backward pass
         optimiser.zero_grad()
@@ -180,15 +205,20 @@ for epoch in range(num_epochs):
         optimiser.step()  # do an update step to update parameters
 
         # print output
-        if (epoch+1) % 10 == 0:
+        if (epoch+1) % 100 == 0 and (i+1) % len(train_loader) == 0:
             print(f"epoch {epoch+1}/{num_epochs}, step {i+1}/{len(train_loader)}. Loss = {loss.item():.4f}")
 
-# test
-with torch.no_grad(): # don't add gradients of test set to computational graph
+# test set
+with torch.no_grad():  # don't add gradients of test set to computational graph
     for sample_batched in test_loader:
         sample_batched["coordinates"] = sample_batched["coordinates"].reshape(-1, input_size).to(device)
-        sample_batched["y"] = sample_batched["y"].to(device)
-        pred_output = model(sample_batched["coordinates"])
-        for aerofoil, prediction in zip(sample_batched['aerofoil'], pred_output):
-            print(f"Aerofoil {aerofoil}: Max ClCd = {prediction[0]:.2f} at {prediction[1]:.2f}deg")
+        ClCd_batch = sample_batched["y"][:, 0]
+        angle_batch = sample_batched["y"][:, 1]
+        pred_ClCd, pred_angle = model(sample_batched["coordinates"])
 
+        for i, (aerofoil, ClCd, angle, act_ClCd, act_angle) in enumerate(zip(sample_batched['aerofoil'], pred_ClCd,
+                                                                             pred_angle, ClCd_batch, angle_batch)):
+            print(f"Aerofoil {aerofoil}")
+            print(f"Predictions: Max ClCd = {ClCd.item():.2f} at {angle.item():.2f}deg")
+            print(f"Actual: Max ClCd = {act_ClCd.item():.2f} at {act_angle.item():.2f}deg")
+            print()
