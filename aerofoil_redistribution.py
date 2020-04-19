@@ -1,5 +1,6 @@
 import numpy as np
 from pathlib import Path
+import shutil
 import os
 import re
 import matplotlib.pyplot as plt
@@ -9,13 +10,14 @@ from random import random
 
 # parameters
 seed(1)
-train_valid_split = 0.7  # percentage to split train and validation set randomly
+train_valid_split = 0.8  # percentage to split train and validation set randomly
 root_dir = Path('data')
 in_files = root_dir / 'downloaded_files'
 out_files = root_dir / 'out'
 chosen_aerofoil_x = 'NACA_0009.csv'  # use x coordinates of this file for all other files
 
 # make folders
+shutil.rmtree(out_files)  # delete all previous outputs
 out_files.mkdir(exist_ok=True)
 train_set = out_files / 'train'
 valid_set = out_files / 'valid'
@@ -64,7 +66,7 @@ def do_code():
                     if i <= 1:
                         continue  # skip first two lines of file
                     else:
-                        xy = re.search(r'\D*([+-]?\d*[.]?\d*)\s+([+-]?\d*[.]?\d*)', line)
+                        xy = re.search(r'\s*([+-]?\d*[.]?\d*)\s+([+-]?\d*[.]?\d*)', line)
                         x_coord.append(float(xy.group(1)))
                         y_coord.append(float(xy.group(2)))
 
