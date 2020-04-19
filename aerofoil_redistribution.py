@@ -3,6 +3,7 @@ from pathlib import Path
 import os
 import re
 import matplotlib.pyplot as plt
+import sys
 from random import seed
 from random import random
 
@@ -56,10 +57,17 @@ def do_code():
         if aerofoils == chosen_aerofoil_x:
             continue  # no need to interpolate chosen aerofoil
         try:
-            # TODO: change reading of file to regular expression so as to avoid issues with the delimiter
-            coordinates = np.loadtxt(in_files / aerofoil, delimiter=' ', dtype=np.float32, skiprows=2)
-            y_coord = coordinates[:, 1]
-            x_coord = coordinates[:, 0]
+            x_coord = []
+            y_coord = []
+            with open(in_files / aerofoil) as f:
+                for i, line in enumerate(f):
+                    if i <= 1:
+                        continue  # skip first two lines of file
+                    else:
+                        xy = re.search(r'\D*([+-]?\d*[.]?\d*)\s+([+-]?\d*[.]?\d*)', line)
+                        x_coord.append(float(xy.group(1)))
+                        y_coord.append(float(xy.group(2)))
+
             x_top = np.append(x_coord[len(y_coord) // 2:0:-1], x_coord[0])
             x_bottom = x_coord[len(y_coord) // 2:]
             y_top = np.append(y_coord[len(y_coord) // 2:0:-1], y_coord[0])
@@ -91,9 +99,6 @@ def do_code():
                 f.write(f"{max_ClCd_angle}")
                 for x, y in zip(x_target, y_target):
                     f.write(f"{x:.4f} {y:.4f}\n")
-                # np.savetxt(f, np.c_[x_target, y_target], fmt='%.4f')
-
-
 
             # plt.plot(x_coord, y_coord, 'r-')
             # plt.plot(x_target, y_target, 'bo')
