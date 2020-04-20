@@ -228,6 +228,28 @@ for epoch in tqdm(range(num_epochs)):
 
 # TODO save model (with time and date)
 
+
+def flatten_check(out, targ):
+    """check that `out` and `targ` have the same number of elements and flatten them"""
+    out, targ = out.contiguous().view(-1), targ.contiguous().view(-1)
+    assert len(out) == len(targ), \
+        f"Expected output and target to have the same number of elements but got {len(out)} and {len(targ)}."
+    return out, targ
+
+
+def root_mean_square(pred, targ):
+    pred, targ = flatten_check(pred, targ)
+    return torch.sqrt(F.mse_loss(pred, targ))
+
+
+def R2_score(pred, targ):
+    """R squared score"""
+    pred, targ = flatten_check(pred, targ)
+    u = torch.sum((targ - pred) ** 2)
+    d = torch.sum((targ - targ.mean()) ** 2)
+    return 1 - u / d
+
+
 # test set
 # TODO add validation set to epoch to calculate...
 test_out = "testset_" + datetime.datetime.now().strftime("D%d_%m_%Y_T%H_%M_%S") + ".csv"
@@ -243,16 +265,16 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
             f.write(f"{'Aerofoil':<{spacing}}"
                     f"{'Pred_ClCd':^{spacing}}{'Targ_ClCd':^{spacing}}{'Accuracy':^{spacing}}"
                     f"{'Pred_angle':^{spacing}}{'Targ_angle':^{spacing}}{'Accuracy':^{spacing}}\n")
+
             for i, (aerofoil, ClCd, angle, act_ClCd, act_angle) in enumerate(zip(sample_batched['aerofoil'], pred_ClCd,
                                                                                  pred_angle, ClCd_batch, angle_batch)):
-                RMS_ClCd_accuracy = torch.sqrt(F.mse_loss(ClCd, act_ClCd))
-                RMS_angle_accuracy = torch.sqrt(F.mse_loss(angle, act_angle))
+                # metrics
+                RMS_ClCd = root_mean_square(ClCd, act_ClCd)
+                RMS_angle = root_mean_square(angle, act_angle)
+                R2_ClCd = R2_score(ClCd, act_ClCd)
+                R2_angle = R2_score(angle, act_angle)
 
-                print(f"Aerofoil {aerofoil}")
-                print(f"Predictions: Max ClCd = {ClCd.item():.2f} at {angle.item():.2f}deg")
-                print(f"Actual: Max ClCd = {act_ClCd.item():.2f} at {act_angle.item():.2f}deg")
-                print()
-
+                # print file
                 f.write(f"{aerofoil[:-4]:<{spacing}}"
-                        f"{ClCd.item():^{spacing}.2f}{act_ClCd.item():^{spacing}.2f}{RMS_ClCd_accuracy:^{spacing}.2f}"
-                        f"{angle.item():^{spacing}.2f}{act_angle.item():^{spacing}.2f}{RMS_angle_accuracy:^{spacing}.2f}\n")
+                        f"{ClCd.item():^{spacing}.2f}{act_ClCd.item():^{spacing}.2f}{RMS_ClCd:^{spacing}.2f}"
+                        f"{angle.item():^{spacing}.2f}{act_angle.item():^{spacing}.2f}{RMS_angle:^{spacing}.2f}\n")
