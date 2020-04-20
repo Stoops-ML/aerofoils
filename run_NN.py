@@ -2,13 +2,28 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import os
 import numpy as np
 from pathlib import Path
 import re
 from tqdm import tqdm
+import datetime
 import sys
+
+
+# title sequence
+strings2print = [f" ",
+                 # f"Weight files to run: {model_names}",
+                 f"Outputs: Max ClCd @ angle"]
+spacing = 60
+print("#"*spacing)
+print(f"#{'Aerofoil regression problem':^{spacing-2}}#")
+for string in strings2print:
+    print(f"# {string:<{spacing-4}} #")
+print("#"*spacing)
+print()
 
 
 class AerofoilDataset(Dataset):
@@ -92,6 +107,10 @@ class ToTensor(object):
 
 # file configuration
 path = Path(__file__).parent
+train_dir = path / 'data' / 'out' / 'train'
+test_dir = path / 'data' / 'out' / 'test'
+print_dir = path / 'print'
+print_dir.mkdir(exist_ok=True)
 
 # device configuration
 torch.manual_seed(0)
@@ -99,11 +118,9 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # hyper parameters
 hidden_layers = [300, 300, 300, 300, 300, 300, 300, 300]
-num_epochs = 10000
+num_epochs = 2000
 bs = 10
-learning_rate = 0.001
-train_dir = path / 'data' / 'out' / 'train'
-test_dir = path / 'data' / 'out' / 'test'
+learning_rate = 0.001  # TODO add learning rate finder
 
 # find input & output size
 input_file = os.listdir(train_dir)[0] if re.search(r"(.csv)$", os.listdir(train_dir)[0]) else os.listdir(train_dir)[1]
@@ -183,7 +200,8 @@ model = NeuralNet(input_size, hidden_layers, output_size).to(device)
 # loss and optimiser
 criterion_ClCd = nn.MSELoss()
 criterion_angle = nn.MSELoss()
-optimiser = torch.optim.SGD(model.parameters(), lr=learning_rate)
+optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
+# optimiser = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
 # training loop
 for epoch in tqdm(range(num_epochs)):
@@ -208,7 +226,11 @@ for epoch in tqdm(range(num_epochs)):
         if (epoch+1) % 100 == 0 and (i+1) % len(train_loader) == 0:
             print(f"epoch {epoch+1}/{num_epochs}, step {i+1}/{len(train_loader)}. Loss = {loss.item():.4f}")
 
+# TODO save model (with time and date)
+
 # test set
+# TODO add validation set to epoch to calculate...
+test_out = "testset_" + datetime.datetime.now().strftime("D%d_%m_%Y_T%H_%M_%S") + ".csv"
 with torch.no_grad():  # don't add gradients of test set to computational graph
     for sample_batched in test_loader:
         sample_batched["coordinates"] = sample_batched["coordinates"].reshape(-1, input_size).to(device)
@@ -216,9 +238,21 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
         angle_batch = sample_batched["y"][:, 1]
         pred_ClCd, pred_angle = model(sample_batched["coordinates"])
 
-        for i, (aerofoil, ClCd, angle, act_ClCd, act_angle) in enumerate(zip(sample_batched['aerofoil'], pred_ClCd,
-                                                                             pred_angle, ClCd_batch, angle_batch)):
-            print(f"Aerofoil {aerofoil}")
-            print(f"Predictions: Max ClCd = {ClCd.item():.2f} at {angle.item():.2f}deg")
-            print(f"Actual: Max ClCd = {act_ClCd.item():.2f} at {act_angle.item():.2f}deg")
-            print()
+        with open(print_dir / test_out, 'w') as f:
+            spacing = 13
+            f.write(f"{'Aerofoil':<{spacing}}"
+                    f"{'Pred_ClCd':^{spacing}}{'Targ_ClCd':^{spacing}}{'Accuracy':^{spacing}}"
+                    f"{'Pred_angle':^{spacing}}{'Targ_angle':^{spacing}}{'Accuracy':^{spacing}}\n")
+            for i, (aerofoil, ClCd, angle, act_ClCd, act_angle) in enumerate(zip(sample_batched['aerofoil'], pred_ClCd,
+                                                                                 pred_angle, ClCd_batch, angle_batch)):
+                RMS_ClCd_accuracy = torch.sqrt(F.mse_loss(ClCd, act_ClCd))
+                RMS_angle_accuracy = torch.sqrt(F.mse_loss(angle, act_angle))
+
+                print(f"Aerofoil {aerofoil}")
+                print(f"Predictions: Max ClCd = {ClCd.item():.2f} at {angle.item():.2f}deg")
+                print(f"Actual: Max ClCd = {act_ClCd.item():.2f} at {act_angle.item():.2f}deg")
+                print()
+
+                f.write(f"{aerofoil[:-4]:<{spacing}}"
+                        f"{ClCd.item():^{spacing}.2f}{act_ClCd.item():^{spacing}.2f}{RMS_ClCd_accuracy:^{spacing}.2f}"
+                        f"{angle.item():^{spacing}.2f}{act_angle.item():^{spacing}.2f}{RMS_angle_accuracy:^{spacing}.2f}\n")
