@@ -52,7 +52,7 @@ class AerofoilDataset(Dataset):
                 xy = [num for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']
                 x.append(float(xy[0]))
                 y.append(float(xy[1]))
-        coords = np.concatenate((x, y))
+        coords = np.stack((x, y), axis=0)  # perhaps using np.loadtxt() is better
 
         sample = {"aerofoil": self.aerofoils[item], "coordinates": coords, "y": [max_ClCd, angle]}
 
@@ -107,9 +107,9 @@ class ToTensor(object):
 path = Path(__file__).parent
 train_dir = path / 'data' / 'out' / 'train'
 test_dir = path / 'data' / 'out' / 'test'
-print_dir = path / 'print'
-print_dir.mkdir(exist_ok=True)
 time_of_run = datetime.datetime.now().strftime("D%d_%m_%Y_T%H_%M_%S")
+print_dir = path / 'print' / time_of_run
+print_dir.mkdir(exist_ok=True)
 
 # device configuration
 torch.manual_seed(0)
@@ -117,7 +117,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # hyper parameters
 hidden_layers = [300, 300, 300, 300, 300, 300, 300, 300]
-num_epochs = 400
+num_epochs = 5000
 bs = 50
 learning_rate = 0.01  # TODO add learning rate finder
 
@@ -133,56 +133,43 @@ train_dataset = AerofoilDataset(train_dir, transform=transforms.Compose([ToTenso
 test_dataset = AerofoilDataset(test_dir, transform=transforms.Compose([ToTensor()]))
 # note: don't actually need to do the ToTensor transform because this is already done by the dataloader. It's needed for
 # images where you need to switch axes
+# show_aerofoil(**train_dataset[0])
 
 # dataloaders
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)
 test_loader = DataLoader(dataset=test_dataset, batch_size=bs, shuffle=False, num_workers=4)
-
-# show aerofoils
-# show_aerofoil(**train_dataset[0])
 # for i, batch in enumerate(test_loader):
 #     show_aerofoil_batch(i, **batch)
 
 
-class NeuralNet(nn.Module):
+class ConvNet(nn.Module):
     def __init__(self, input_size, hidden_layers, num_outputs):
-        super(NeuralNet, self).__init__()
-        self.linear1 = nn.Linear(input_size, hidden_layers[0])
-        self.bn1 = nn.BatchNorm1d(num_features=hidden_layers[0])
-        self.linear2 = nn.Linear(hidden_layers[0], hidden_layers[1])
-        self.bn2 = nn.BatchNorm1d(num_features=hidden_layers[1])
-        self.linear3 = nn.Linear(hidden_layers[1], hidden_layers[2])
-        self.bn3 = nn.BatchNorm1d(num_features=hidden_layers[2])
-        self.linear4 = nn.Linear(hidden_layers[2], hidden_layers[3])
-        self.bn4 = nn.BatchNorm1d(num_features=hidden_layers[3])
-        self.linear5 = nn.Linear(hidden_layers[3], hidden_layers[4])
-        self.bn5 = nn.BatchNorm1d(num_features=hidden_layers[4])
-        self.linear6 = nn.Linear(hidden_layers[4], hidden_layers[5])
-        self.bn6 = nn.BatchNorm1d(num_features=hidden_layers[5])
-        self.linear7 = nn.Linear(hidden_layers[5], hidden_layers[6])
-        self.bn7 = nn.BatchNorm1d(num_features=hidden_layers[6])
-        self.linear8 = nn.Linear(hidden_layers[6], num_outputs)
-        self.bn8 = nn.BatchNorm1d(num_features=num_outputs)
-
-        # TODO: use nn.ModuleDict to iterate through layers
-        # self.nn_model = {}
-        # for i, layer_size in enumerate(layers):
-        #     self.nn_model[f"layer{i+1}"] = nn.Linear(layer_size, layers[i+1])
-        #     if i+1 == len(layers)-1:
-        #         break
+        super(ConvNet, self).__init__()
+        self.conv1 = nn.Conv1d(2, 6, 2)  # 2 input channels (of 1D): x and y. 6 output channels
+        self.pool = nn.MaxPool1d(2, 2)
+        self.conv2 = nn.Conv1d(6, 16, 2)
+        self.fc1 = nn.Linear(464, 300)
+        self.fc2 = nn.Linear(300, 200)
+        self.fc3 = nn.Linear(200, 100)
+        self.fc4 = nn.Linear(100, 84)
+        self.fc5 = nn.Linear(84, 50)
+        self.fc6 = nn.Linear(50, 50)
+        self.fc7 = nn.Linear(50, 50)
 
     def forward(self, x):
-        out = F.relu(self.bn1(self.linear1(x)))
-        out = F.relu(self.bn2(self.linear2(out)))
-        out = F.relu(self.bn3(self.linear3(out)))
-        out = F.relu(self.bn4(self.linear4(out)))
-        out = F.relu(self.bn5(self.linear5(out)))
-        out = F.relu(self.bn6(self.linear6(out)))
-        out = F.relu(self.bn7(self.linear7(out)))
-        out = self.bn8(self.linear8(out))
+        out = self.pool(F.relu(self.conv1(x)))
+        out = self.pool(F.relu(self.conv2(out)))
+        out = out.view(-1, 1, 464)
+        out = F.relu(self.fc1(out))
+        out = F.relu(self.fc2(out))
+        out = F.relu(self.fc3(out))
+        out = F.relu(self.fc4(out))
+        out = F.relu(self.fc5(out))
+        out = F.relu(self.fc6(out))
+        out = self.fc7(out)
 
-        ClCd_batch = out[:, 0]
-        angle_batch = out[:, 1]
+        ClCd_batch = out[:, 0, 0]
+        angle_batch = out[:, 0, 1]
 
         # out = x
         # for i in range(len(self.nn_model)):
@@ -195,7 +182,7 @@ class NeuralNet(nn.Module):
         return ClCd_batch, angle_batch
 
 
-model = NeuralNet(input_size, hidden_layers, output_size).to(device)
+model = ConvNet(input_size, hidden_layers, output_size).to(device)
 
 # loss and optimiser
 criterion_ClCd = nn.MSELoss()
@@ -207,7 +194,7 @@ model.train()  # needed?
 for epoch in tqdm(range(num_epochs)):
     for i, sample in enumerate(train_loader):
         # reshape input to column vector
-        sample["coordinates"] = sample["coordinates"].to(device)  # .reshape(-1, input_size)
+        sample["coordinates"] = sample["coordinates"].to(device)
         ClCd_batch = sample["y"][:, 0].to(device)
         angle_batch = sample["y"][:, 1].to(device)
 
@@ -226,7 +213,7 @@ for epoch in tqdm(range(num_epochs)):
         if (epoch+1) % 100 == 0 and (i+1) % len(train_loader) == 0:
             print(f"epoch {epoch+1}/{num_epochs}, step {i+1}/{len(train_loader)}. Loss = {loss.item():.4f}")
 
-torch.save(model.state_dict(), print_dir / (time_of_run + ".pkl"))  # creates pickle file
+torch.save(model.state_dict(), print_dir / "model.pkl")  # creates pickle file
 
 
 def flatten_check(out, targ):
@@ -247,7 +234,7 @@ def R2_score(pred, targ):
     pred, targ = flatten_check(pred, targ)
     u = torch.sum((targ - pred) ** 2)
     d = torch.sum((targ - targ.mean()) ** 2)
-    return 1 - u / d
+    return 1 - (u / d).item()
 
 
 # test set
@@ -260,26 +247,49 @@ def R2_score(pred, targ):
 # loaded_model.eval()
 model.eval()  # turn off batch normalisation and dropout
 with torch.no_grad():  # don't add gradients of test set to computational graph
+    ClCd = torch.tensor([])
+    angle = torch.tensor([])
+    predicted_ClCd = torch.tensor([])
+    predicted_angle = torch.tensor([])
     for sample_batched in test_loader:
-        sample_batched["coordinates"] = sample_batched["coordinates"].to(device)  # .reshape(-1, input_size)
+        sample_batched["coordinates"] = sample_batched["coordinates"].to(device)
         ClCd_batch = sample_batched["y"][:, 0].to(device)
         angle_batch = sample_batched["y"][:, 1].to(device)
+
         pred_ClCd, pred_angle = model(sample_batched["coordinates"].float())
-        print(f"ClCd RMS: {root_mean_square(pred_ClCd, ClCd_batch):.2f}")
-        print(f"angle RMS: {root_mean_square(pred_angle, angle_batch):.2f}")
+        ClCd = torch.cat((ClCd_batch, ClCd), 0)
+        angle = torch.cat((angle_batch, angle), 0)
+        predicted_ClCd = torch.cat((pred_ClCd, predicted_ClCd), 0)
+        predicted_angle = torch.cat((pred_angle, predicted_angle), 0)
 
-        # with open(print_dir / test_out, 'w') as f:
-        #     spacing = 13
-        #     f.write(f"{'Aerofoil':<{spacing}}"
-        #             f"{'Pred_ClCd':^{spacing}}{'Targ_ClCd':^{spacing}}{'RMS':^{spacing}}"
-        #             f"{'Pred_angle':^{spacing}}{'Targ_angle':^{spacing}}{'RMS':^{spacing}}\n")
+print(f"ClCd RMS: {root_mean_square(predicted_ClCd, ClCd):.2f}")
+print(f"angle RMS: {root_mean_square(predicted_angle, angle):.2f}")
 
-            # for i, (aerofoil, ClCd, angle, act_ClCd, act_angle) in enumerate(zip(sample_batched['aerofoil'], pred_ClCd,
-            #                                                                      pred_angle, ClCd_batch, angle_batch)):
+with open(print_dir / "RESULTS.txt", 'w') as f:
+    f.write(f"Number of epochs = {num_epochs}\n"
+            f"ClCd: RMS = {root_mean_square(predicted_ClCd, ClCd):.2f}, "
+            f"R2 = {R2_score(predicted_ClCd, ClCd):.2f}\n"
+            f"ClCd: RMS = {root_mean_square(predicted_angle, angle):.2f}, "
+            f"R2 = {R2_score(predicted_angle, angle):.2f}\n")
 
-                # # print file
-                # f.write(f"{aerofoil[:-4]:<{spacing}}"
-                #         f"{ClCd.item():^{spacing}.2f}{act_ClCd.item():^{spacing}.2f}"
-                #         f"{angle.item():^{spacing}.2f}{act_angle.item():^{spacing}.2f}\n")
+# Visualize feature maps
+activation = {}
+def get_activation(name):
+    def hook(model, input, output):
+        activation[name] = output.detach()
+    return hook
+
+model.conv2.register_forward_hook(get_activation('conv2'))
+output = model((test_dataset[0])["coordinates"].view(1, 2, 121).float().to(device))
+
+act = activation['conv2'].squeeze()
+fig, axarr = plt.subplots(act.size(0))
+for idx in range(act.size(0)):
+    axarr[idx].plot(act[idx])
+# plt.scatter(sample_batched["coordinates"][0, 0, :].detach().numpy(),
+#                  sample_batched["coordinates"][0, 1, :].detach().numpy())
+plt.show()
+
+
 
 
