@@ -10,98 +10,15 @@ from pathlib import Path
 import re
 from tqdm import tqdm
 import datetime
+import ErrorMetrics as err
 import sys
+import AerofoilDataset as AD
+import TitleSequence as Title
+import ShowAerofoil as show
 
 
 # title sequence
-strings2print = [f" ",
-                 # f"Weight files to run: {model_names}",
-                 f"Outputs: Max ClCd @ angle"]
-spacing = 60
-print("#"*spacing)
-print(f"#{'Aerofoil regression problem':^{spacing-2}}#")
-for string in strings2print:
-    print(f"# {string:<{spacing-4}} #")
-print("#"*spacing)
-print()
-
-
-class AerofoilDataset(Dataset):
-    def __init__(self, root_dir, transform=None):
-        """data loading"""
-        self.root_dir = Path(root_dir)
-        self.aerofoils = [file for file in os.listdir(root_dir)
-                          if re.search(r"(.csv)$", file)
-                          if os.path.isfile(root_dir / file)]
-        self.transform = transform
-
-    def __getitem__(self, item):
-        """index into dataset"""
-        if torch.is_tensor(item):
-            item = item.tolist()
-
-        # read data (saves memory by not reading data in __init__)
-        x = []
-        y = []
-        with open(self.root_dir / self.aerofoils[item]) as f:
-            for line in f:
-                if re.search(r'ClCd', line):  # find y values
-                    y_vals = [num for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']
-                    max_ClCd, angle = float(y_vals[0]), float(y_vals[1])
-                    continue
-                xy = [num for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']
-                x.append(float(xy[0]))
-                y.append(float(xy[1]))
-        coords = np.concatenate((x, y))
-
-        sample = {"aerofoil": self.aerofoils[item], "coordinates": coords, "y": [max_ClCd, angle]}
-
-        if self.transform:
-            sample = self.transform(sample)
-
-        return sample
-
-    def __len__(self):
-        """get length of dataset"""
-        return len(self.aerofoils)
-
-
-def show_aerofoil(**kwargs):
-    """show plot of aerofoil"""
-    plt.plot(kwargs["coordinates"][:, 0], kwargs["coordinates"][:, 1], 'r-')
-    plt.title(kwargs["aerofoil"])
-    ClCd, angle = kwargs["y"]
-    plt.text(0, 0, f"Max ClCd = {ClCd:.2f} at {angle:.2f} degrees")
-    plt.show()
-
-
-def show_aerofoil_batch(batch_num, **sample_batched):
-    """show plot of aerofoils for a batch of samples."""
-    aerofoils_batch, coordinates_batch, y_batch = sample_batched['aerofoil'], sample_batched['coordinates'],\
-                                                  sample_batched["y"]
-    ClCd_batch, angle_batch = y_batch[:, 0], y_batch[:, 1]
-    batch_size = len(aerofoils_batch)
-
-    fig = plt.figure()
-    for i, (aerofoil, coords, ClCd, angle) in enumerate(zip(aerofoils_batch, coordinates_batch, ClCd_batch,
-                                                            angle_batch)):
-        ax = fig.add_subplot(1, batch_size, i+1)
-        ax.plot(coords[:, 0], coords[:, 1], 'r-')
-        ax.text(0, 0, f"Max ClCd = {ClCd:.2f}\nat {angle:.2f}deg")
-        ax.title.set_text(aerofoil)
-
-    plt.suptitle(f'Batch #{batch_num} from dataloader')
-    plt.show()
-
-
-class ToTensor(object):
-    """convert ndarrays in sample to Tensors."""
-
-    def __call__(self, sample): return {'aerofoil': sample['aerofoil'],
-                                        'coordinates': torch.from_numpy(sample['coordinates']),
-                                        # 'x': torch.FloatTensor(sample['x']),
-                                        'y': torch.FloatTensor(sample['y'])}
-
+Title.print_title([" ", "Neural network", "Outputs: Max ClCd @ angle"])
 
 # file configuration
 path = Path(__file__).parent
@@ -129,19 +46,17 @@ with open(train_dir / input_file) as f:
 output_size = len([num for num in obj if num != ''])
 
 # import dataset
-train_dataset = AerofoilDataset(train_dir, transform=transforms.Compose([ToTensor()]))
-test_dataset = AerofoilDataset(test_dir, transform=transforms.Compose([ToTensor()]))
-# note: don't actually need to do the ToTensor transform because this is already done by the dataloader. It's needed for
-# images where you need to switch axes
+train_dataset = AD.AerofoilDataset(train_dir, transform=transforms.Compose([AD.ToTensor()]))
+test_dataset = AD.AerofoilDataset(test_dir, transform=transforms.Compose([AD.ToTensor()]))
 
 # dataloaders
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)
 test_loader = DataLoader(dataset=test_dataset, batch_size=bs, shuffle=False, num_workers=4)
 
 # show aerofoils
-# show_aerofoil(**train_dataset[0])
+# show.show_aerofoil(**train_dataset[0])
 # for i, batch in enumerate(test_loader):
-#     show_aerofoil_batch(i, **batch)
+#     show.show_aerofoil_batch(i, **batch)
 
 
 class NeuralNet(nn.Module):
@@ -207,7 +122,7 @@ model.train()  # needed?
 for epoch in tqdm(range(num_epochs)):
     for i, sample in enumerate(train_loader):
         # reshape input to column vector
-        sample["coordinates"] = sample["coordinates"].to(device)  # .reshape(-1, input_size)
+        sample["coordinates"] = sample["coordinates"].view(-1, input_size).to(device)
         ClCd_batch = sample["y"][:, 0].to(device)
         angle_batch = sample["y"][:, 1].to(device)
 
@@ -229,27 +144,6 @@ for epoch in tqdm(range(num_epochs)):
 torch.save(model.state_dict(), print_dir / (time_of_run + ".pkl"))  # creates pickle file
 
 
-def flatten_check(out, targ):
-    """check that `out` and `targ` have the same number of elements and flatten them"""
-    out, targ = out.contiguous().view(-1), targ.contiguous().view(-1)
-    assert len(out) == len(targ), \
-        f"Expected output and target to have the same number of elements but got {len(out)} and {len(targ)}."
-    return out, targ
-
-
-def root_mean_square(pred, targ):
-    pred, targ = flatten_check(pred, targ)
-    return torch.sqrt(F.mse_loss(pred, targ))
-
-
-def R2_score(pred, targ):
-    """R squared score"""
-    pred, targ = flatten_check(pred, targ)
-    u = torch.sum((targ - pred) ** 2)
-    d = torch.sum((targ - targ.mean()) ** 2)
-    return 1 - u / d
-
-
 # test set
 # TODO add validation set to epoch to calculate...
 # loaded_model = NeuralNet(input_size, hidden_layers, output_size).to(device)  # same as trained model
@@ -261,12 +155,12 @@ def R2_score(pred, targ):
 model.eval()  # turn off batch normalisation and dropout
 with torch.no_grad():  # don't add gradients of test set to computational graph
     for sample_batched in test_loader:
-        sample_batched["coordinates"] = sample_batched["coordinates"].to(device)  # .reshape(-1, input_size)
+        sample_batched["coordinates"] = sample_batched["coordinates"].view(-1, input_size).to(device)
         ClCd_batch = sample_batched["y"][:, 0].to(device)
         angle_batch = sample_batched["y"][:, 1].to(device)
         pred_ClCd, pred_angle = model(sample_batched["coordinates"].float())
-        print(f"ClCd RMS: {root_mean_square(pred_ClCd, ClCd_batch):.2f}")
-        print(f"angle RMS: {root_mean_square(pred_angle, angle_batch):.2f}")
+        print(f"ClCd RMS: {err.root_mean_square(pred_ClCd, ClCd_batch):.2f}")
+        print(f"angle RMS: {err.root_mean_square(pred_angle, angle_batch):.2f}")
 
         # with open(print_dir / test_out, 'w') as f:
         #     spacing = 13
