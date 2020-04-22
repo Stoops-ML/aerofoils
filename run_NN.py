@@ -38,16 +38,18 @@ num_epochs = 400
 bs = 50
 learning_rate = 0.01  # TODO add learning rate finder
 
-# find input & output size
-input_file = os.listdir(train_dir)[0] if re.search(r"(.csv)$", os.listdir(train_dir)[0]) else os.listdir(train_dir)[1]
-with open(train_dir / input_file) as f:
-    obj = re.findall(r'[+-]?\d*[.]?\d*', f.readline())
-    input_size = sum(1 for _ in f) * 2
-output_size = len([num for num in obj if num != ''])
-
 # import dataset
 train_dataset = AD.AerofoilDataset(train_dir, transform=transforms.Compose([AD.ToTensor()]))
 test_dataset = AD.AerofoilDataset(test_dir, transform=transforms.Compose([AD.ToTensor()]))
+
+# find input & output size
+num_channels = len(train_dataset[0]['coordinates'].shape)  # how many columns of input there are (e.g x,y coords)
+if num_channels == 1:  # 1 channel in input
+    input_size = len(train_dataset[0]['coordinates'])
+else:  # several channels in input
+    _, input_size = train_dataset[0]['coordinates'].shape
+input_size *= num_channels  # required for flattening input
+output_size = len(train_dataset[0]['y'])
 
 # dataloaders
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)

@@ -21,7 +21,7 @@ class AerofoilDataset(Dataset):
             item = item.tolist()
 
         # read data (saves memory by not reading data in __init__)
-        x = []
+        # x = []
         y = []
         with open(self.root_dir / self.aerofoils[item]) as f:
             for line in f:
@@ -30,11 +30,13 @@ class AerofoilDataset(Dataset):
                     max_ClCd, angle = float(y_vals[0]), float(y_vals[1])
                     continue
                 xy = [num for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']
-                x.append(float(xy[0]))
+                # x.append(float(xy[0]))
                 y.append(float(xy[1]))
-        coords = np.stack((x, y), axis=0)
+        # coords = np.stack((x, y), axis=0)
 
-        sample = {"aerofoil": self.aerofoils[item], "coordinates": coords, "y": [max_ClCd, angle]}
+        # only taking y coordinates as all aerofoils have same x coordinates
+        sample = {"aerofoil": self.aerofoils[item], "coordinates": np.array(y), "y": [max_ClCd, angle]}
+        # sample = {"aerofoil": self.aerofoils[item], "coordinates": coords, "y": [max_ClCd, angle]}
 
         if self.transform:
             sample = self.transform(sample)
