@@ -36,7 +36,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # hyper parameters
 hidden_layers = [300, 300, 300, 300, 300, 300]
 convolutions = [6, 16, 40, 120]
-num_epochs = 3000
+num_epochs = 1
 bs = 100
 learning_rate = 0.01  # TODO add learning rate finder
 
@@ -90,10 +90,12 @@ class ConvNet(nn.Module):
         self.bn7 = nn.BatchNorm1d(num_features=num_channels)
         # do i have to multiply the y values of the predictions by the normalised values?
 
-        # add transpose convolution to get back original input size. Then you can plot the activations to the same scale
-        # as the original input size???????
-        # but the length of the activation is 120 = original input size, so why do I need transpose convolution?
-        # self.conv_trans1 = nn.ConvTranspose1d
+        # TODO: fix the decoder: https://stackoverflow.com/questions/55033669/encoding-and-decoding-pictures-pytorch
+        self.decoder = torch.nn.Sequential(
+            nn.ConvTranspose1d(convolutions[3], convolutions[2], filter_size),
+            # nn.ReLU(),
+            nn.ConvTranspose1d(convolutions[2], convolutions[1], filter_size),
+            nn.ConvTranspose1d(convolutions[1], num_channels, filter_size))
 
     def forward(self, x):
         # DO BATCHNORM AFTER CONVOLUTIONS
@@ -123,6 +125,9 @@ class ConvNet(nn.Module):
 
         # I think MSEloss() applies an activation function to the last layer itself
         return ClCd_batch, angle_batch
+
+    def decode(self, x):
+        return self.decoder(x)
 
 
 model = ConvNet(input_size, hidden_layers, output_size, convolutions).to(device)
@@ -174,6 +179,8 @@ for epoch in tqdm(range(num_epochs)):
                   f"Loss = {loss.item():.4f}\n"
                   f"ClCd RMS: {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
                   f"angle RMS: {metrics.root_mean_square(predicted_angle, angle):.2f}\n")
+
+# result = model.decode(model((test_dataset[0])["coordinates"]).view(-1, num_channels, input_size))  # before train
 
 # test set
 model.eval()  # turn off batch normalisation and dropout
