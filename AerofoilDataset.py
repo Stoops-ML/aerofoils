@@ -47,6 +47,16 @@ class AerofoilDataset(Dataset):
         """get length of dataset"""
         return len(self.aerofoils)
 
+    def get_sizes(self):
+        num_channels = len(self.__getitem__(0)['coordinates'].shape)  # number of columns of input (e.g x,y coords)
+        if num_channels == 1:  # 1 channel
+            input_size = len(self.__getitem__(0)['coordinates'])
+        else:  # several channels
+            _, input_size = self.__getitem__(0)['coordinates'].shape
+        output_size = len(self.__getitem__(0)['y'])
+
+        return num_channels, input_size, output_size
+
 
 class ToTensor(object):
     """convert ndarrays in sample to Tensors."""

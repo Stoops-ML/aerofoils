@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 from tqdm import tqdm
 import datetime
-import ErrorMetrics as err
+import ErrorMetrics as metrics
 import ShowAerofoil as show
 import AerofoilDataset as AD
 import TitleSequence as Title
@@ -43,14 +43,7 @@ learning_rate = 0.01  # TODO add learning rate finder
 # import dataset
 train_dataset = AD.AerofoilDataset(train_dir, transform=transforms.Compose([AD.ToTensor()]))
 test_dataset = AD.AerofoilDataset(test_dir, transform=transforms.Compose([AD.ToTensor()]))
-
-# find input & output size
-num_channels = len(train_dataset[0]['coordinates'].shape)  # how many columns of input there are (e.g x,y coords)
-if num_channels == 1:  # 1 channel
-    input_size = len(train_dataset[0]['coordinates'])
-else:  # several channels
-    _, input_size = train_dataset[0]['coordinates'].shape
-output_size = len(train_dataset[0]['y'])
+num_channels, input_size, output_size = AD.AerofoilDataset.get_sizes(train_dataset)
 
 # dataloaders
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)
@@ -195,15 +188,15 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
         predicted_ClCd = torch.cat((pred_ClCd, predicted_ClCd), 0)
         predicted_angle = torch.cat((pred_angle, predicted_angle), 0)
 
-print(f"ClCd RMS: {err.root_mean_square(predicted_ClCd, ClCd):.2f}")
-print(f"angle RMS: {err.root_mean_square(predicted_angle, angle):.2f}")
+print(f"ClCd RMS: {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}")
+print(f"angle RMS: {metrics.root_mean_square(predicted_angle, angle):.2f}")
 
 with open(print_dir / "RESULTS.txt", 'w') as f:
     f.write(f"Number of epochs = {num_epochs}\n"
-            f"ClCd: RMS = {err.root_mean_square(predicted_ClCd, ClCd):.2f}, "
-            f"R2 = {err.R2_score(predicted_ClCd, ClCd):.2f}\n"
-            f"angle: RMS = {err.root_mean_square(predicted_angle, angle):.2f}, "
-            f"R2 = {err.R2_score(predicted_angle, angle):.2f}\n")
+            f"ClCd: RMS = {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
+            f"R2 = {metrics.R2_score(predicted_ClCd, ClCd):.2f}\n"
+            f"angle: RMS = {metrics.root_mean_square(predicted_angle, angle):.2f}, "
+            f"R2 = {metrics.R2_score(predicted_angle, angle):.2f}\n")
 
 # Visualize feature maps
 activation = {}
