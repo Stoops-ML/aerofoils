@@ -27,7 +27,7 @@ train_dir = path / 'data' / 'out' / 'train'
 test_dir = path / 'data' / 'out' / 'test'
 time_of_run = datetime.datetime.now().strftime("D%d_%m_%Y_T%H_%M_%S")
 save_model = False
-print_activations = True
+print_activations = False
 
 # device configuration
 torch.manual_seed(0)
@@ -62,11 +62,16 @@ class ConvNet(nn.Module):
         stride = 2
         padding = 0
 
-        self.conv1 = nn.Conv1d(num_channels, convolutions[0], filter_size)  # 2 input channels (of 1D): x and y coords
-        self.pool = nn.MaxPool1d(2, stride)
-        self.conv2 = nn.Conv1d(convolutions[0], convolutions[1], filter_size)
-        self.conv3 = nn.Conv1d(convolutions[1], convolutions[2], filter_size)
-        self.conv4 = nn.Conv1d(convolutions[2], convolutions[3], filter_size)
+        # TODO: do batchnorms after every convolution?
+        self.convolutions = nn.Sequential(
+            nn.Conv1d(num_channels, convolutions[0], filter_size),  # 2 input channels (of 1D): x and y coords
+            nn.MaxPool1d(2, stride),
+            nn.Conv1d(convolutions[0], convolutions[1], filter_size),
+            nn.MaxPool1d(2, stride),
+            nn.Conv1d(convolutions[1], convolutions[2], filter_size),
+            nn.MaxPool1d(2, stride),
+            nn.Conv1d(convolutions[2], convolutions[3], filter_size),
+            nn.MaxPool1d(2, stride))
 
         image_size = input_size
         for _ in range(len(convolutions)):
@@ -74,23 +79,31 @@ class ConvNet(nn.Module):
             image_size = calc
         self.image_size = calc - 1
 
-        self.fc1 = nn.Linear(self.image_size * convolutions[-1], hidden_layers[0])
-        self.bn1 = nn.BatchNorm1d(num_features=num_channels)
-        self.fc2 = nn.Linear(hidden_layers[0], hidden_layers[1])
-        self.bn2 = nn.BatchNorm1d(num_features=num_channels)
-        self.fc3 = nn.Linear(hidden_layers[1], hidden_layers[2])
-        self.bn3 = nn.BatchNorm1d(num_features=num_channels)
-        self.fc4 = nn.Linear(hidden_layers[2], hidden_layers[3])
-        self.bn4 = nn.BatchNorm1d(num_features=num_channels)
-        self.fc5 = nn.Linear(hidden_layers[3], hidden_layers[4])
-        self.bn5 = nn.BatchNorm1d(num_features=num_channels)
-        self.fc6 = nn.Linear(hidden_layers[4], hidden_layers[5])
-        self.bn6 = nn.BatchNorm1d(num_features=num_channels)
-        self.fc7 = nn.Linear(hidden_layers[5], num_outputs)
-        self.bn7 = nn.BatchNorm1d(num_features=num_channels)
+        self.fully_connected = nn.Sequential(
+            nn.Linear(self.image_size * convolutions[-1], hidden_layers[0]),
+            nn.BatchNorm1d(num_features=num_channels),
+            nn.ReLU(),
+            nn.Linear(hidden_layers[0], hidden_layers[1]),
+            nn.BatchNorm1d(num_features=num_channels),
+            nn.ReLU(),
+            nn.Linear(hidden_layers[1], hidden_layers[2]),
+            nn.BatchNorm1d(num_features=num_channels),
+            nn.ReLU(),
+            nn.Linear(hidden_layers[2], hidden_layers[3]),
+            nn.BatchNorm1d(num_features=num_channels),
+            nn.ReLU(),
+            nn.Linear(hidden_layers[3], hidden_layers[4]),
+            nn.BatchNorm1d(num_features=num_channels),
+            nn.ReLU(),
+            nn.Linear(hidden_layers[4], hidden_layers[5]),
+            nn.BatchNorm1d(num_features=num_channels),
+            nn.ReLU(),
+            nn.Linear(hidden_layers[5], num_outputs),
+            nn.BatchNorm1d(num_features=num_channels))
         # do i have to multiply the y values of the predictions by the normalised values?
 
         # TODO: fix the decoder: https://stackoverflow.com/questions/55033669/encoding-and-decoding-pictures-pytorch
+        # https://discuss.pytorch.org/t/visualize-feature-map/29597/6
         self.decoder = torch.nn.Sequential(
             nn.ConvTranspose1d(convolutions[3], convolutions[2], filter_size),
             # nn.ReLU(),
@@ -98,21 +111,9 @@ class ConvNet(nn.Module):
             nn.ConvTranspose1d(convolutions[1], num_channels, filter_size))
 
     def forward(self, x):
-        # DO BATCHNORM AFTER CONVOLUTIONS
-        out = self.pool(F.relu(self.conv1(x)))
-        out = self.pool(F.relu(self.conv2(out)))
-        out = self.pool(F.relu(self.conv3(out)))
-        out = self.pool(F.relu(self.conv4(out)))
-
+        out = self.convolutions(x)
         out = out.view(-1, 1, self.image_size * convolutions[-1])  # -1 for number of aerofoils in batch
-
-        out = F.relu(self.bn1(self.fc1(out)))
-        out = F.relu(self.bn2(self.fc2(out)))
-        out = F.relu(self.bn3(self.fc3(out)))
-        out = F.relu(self.bn4(self.fc4(out)))
-        out = F.relu(self.bn5(self.fc5(out)))
-        out = F.relu(self.bn6(self.fc6(out)))
-        out = self.bn7(self.fc7(out))
+        out = self.fully_connected(out)
 
         ClCd_batch = out[:, 0, 0]
         angle_batch = out[:, 0, 1]
@@ -180,7 +181,7 @@ for epoch in tqdm(range(num_epochs)):
                   f"ClCd RMS: {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
                   f"angle RMS: {metrics.root_mean_square(predicted_angle, angle):.2f}\n")
 
-# result = model.decode(model((test_dataset[0])["coordinates"]).view(-1, num_channels, input_size))  # before train
+# result = model.decode(model((test_dataset[0])["coordinates"]).view(-1, num_channels, input_size))
 
 # test set
 model.eval()  # turn off batch normalisation and dropout
