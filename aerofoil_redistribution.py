@@ -12,9 +12,9 @@ from random import seed, random
 seed(1)
 train_valid_split = 0.8  # percentage to split train and validation set randomly
 root_dir = Path('data')
-in_files = root_dir / 'downloaded_files'
+in_files = root_dir / 'auto_downloaded_files'
 out_files = root_dir / 'out'
-chosen_aerofoil_x = 'NACA_24112.csv'  # use x coordinates of this file for all other files
+chosen_aerofoil_x = 'du06.csv'  # use x coordinates of this file for all other files
 
 # make folders
 shutil.rmtree(out_files)  # delete all previous outputs
@@ -49,8 +49,6 @@ for aerofoil in aerofoils:
         y_coord = []
         with open(in_files / aerofoil) as f:
             for i, line in enumerate(f):
-                if i <= 1:
-                    continue  # skip first two lines of file
                 if "NACA" in line:
                     continue
                 if 'ClCd' in line:
@@ -89,4 +87,4 @@ for aerofoil in aerofoils:
               f"Error: {exc}.\n")
 
 print(f"Code finished. Output folder: {out_files}.\n"
-          f"Number of coordinates in every aerofoil file: {len(y_target)}")
+      f"Number of coordinates in every aerofoil file: {len(x_target)}")

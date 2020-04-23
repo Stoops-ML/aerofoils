@@ -19,7 +19,7 @@ def show_aerofoil(writer, tensorboard=False, **kwargs):
 def show_aerofoil_batch(batch_num, **sample_batched):
     """show plot of aerofoils for a batch of samples."""
     # TODO: tidy up matplotlib plotting of batches
-    # TODO: add TensorBoard functionality. Put all plots in a grid using
+    # TODO: add TensorBoard functionality. Put all plots in a grid using: https://www.tensorflow.org/tensorboard/image_summaries
     # images = np.reshape(train_images[0:25], (-1, 28, 28, 1))  # Don't forget to reshape.
     # tf.summary.image("25 training data examples", images, max_outputs=25, step=0)
 

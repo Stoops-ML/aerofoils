@@ -3,13 +3,11 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import torchvision
-import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import os
 import numpy as np
 from pathlib import Path
 import re
-from tqdm import tqdm
 import datetime
 import ErrorMetrics as metrics
 import ShowAerofoil as show
@@ -31,7 +29,7 @@ hidden_layers = [300, 300, 300, 300, 300, 300]
 convolutions = [6, 16, 40, 120]
 num_epochs = 3000
 bs = 100
-learning_rate = 0.01  # TODO add learning rate finder
+learning_rate = 0.1  # TODO add learning rate finder
 
 # file configuration
 time_of_run = datetime.datetime.now().strftime("D%d_%m_%Y_T%H_%M_%S")
@@ -40,10 +38,20 @@ train_dir = path / 'data' / 'out' / 'train'
 valid_dir = path / 'data' / 'out' / 'valid'
 test_dir = path / 'data' / 'out' / 'test'
 print_dir = path / 'print' / time_of_run
-writer = SummaryWriter(print_dir / 'runs')
+writer = SummaryWriter(print_dir / 'TensorBoard_events')
 if run_tensorboard:
     TB_process = subprocess.Popen(["tensorboard", f"--logdir={path}"],  # use {print_dir} to show just this run
                                   stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)
+
+# write log file of architecture and for note taking
+with open(print_dir / "log.txt", 'w') as f:
+    f.write(re.sub(r'_', '/', time_of_run) + "\n")
+    f.write(f"Epochs: {num_epochs}\n")
+    f.write(f"Learning rate = {learning_rate}\n")
+    f.write(f"Number of layers = {len(hidden_layers) + 2}\n")
+    f.write(f"Hidden layers = {hidden_layers}\n")
+    f.write(f"Number of convolutions = {len(convolutions)}\n")
+    f.write(f"Convolutions = {convolutions}\n")
 
 # title sequence
 save_model_str = "MODEL WILL BE SAVED" if save_model else "Model will NOT be saved"
@@ -174,51 +182,53 @@ for epoch in (range(num_epochs)):  # tqdm doesn't seem to work with nested loops
         loss_ClCd = criterion_ClCd(pred_ClCd, ClCd_batch)
         loss_angle = criterion_angle(pred_angle, angle_batch)
         loss = loss_ClCd + loss_angle
-        train_loss += loss.item() * len(sample)   # loss.item() returns average loss per sample in batch
 
         # backward pass
         optimiser.zero_grad()
         loss.backward()
         optimiser.step()
 
-    # calculate validation loss
-    if (epoch+1) % print_epoch == 0:
-        # TODO make better variable names here
-        with torch.no_grad():  # don't add gradients of test set to computational graph
-            ClCd = torch.tensor([])
-            angle = torch.tensor([])
-            predicted_ClCd = torch.tensor([])
-            predicted_angle = torch.tensor([])
-            for sample_batched in valid_loader:
-                sample_batched["coordinates"] = sample_batched["coordinates"].view(-1, 1, input_size).to(device)
-                ClCd_batch = sample_batched["y"][:, 0].to(device)
-                angle_batch = sample_batched["y"][:, 1].to(device)
+        if (epoch+1) % print_epoch == 0:  # at the 100th epoch:
+            # calculate training loss
+            train_loss += loss.item() * len(sample)   # loss.item() returns average loss per sample in batch
 
-                pred_ClCd, pred_angle = model(sample_batched["coordinates"].float())
-                ClCd = torch.cat((ClCd_batch, ClCd), 0)
-                angle = torch.cat((angle_batch, angle), 0)
-                predicted_ClCd = torch.cat((pred_ClCd, predicted_ClCd), 0)
-                predicted_angle = torch.cat((pred_angle, predicted_angle), 0)
+            # calculate validation loss
+            if (i+1) % len(train_loader) == 0:  # after all batches of training set run:
+                # TODO make better variable names here
+                with torch.no_grad():  # don't add gradients of test set to computational graph
+                    ClCd = torch.tensor([])
+                    angle = torch.tensor([])
+                    predicted_ClCd = torch.tensor([])
+                    predicted_angle = torch.tensor([])
+                    for sample_batched in valid_loader:
+                        sample_batched["coordinates"] = sample_batched["coordinates"].view(-1, 1, input_size).to(device)
+                        ClCd_batch = sample_batched["y"][:, 0].to(device)
+                        angle_batch = sample_batched["y"][:, 1].to(device)
 
-                valid_loss += (criterion_angle(pred_angle, angle_batch) +
-                               criterion_ClCd(pred_ClCd, ClCd_batch)).item() * len(sample_batched)
+                        pred_ClCd, pred_angle = model(sample_batched["coordinates"].float())
+                        ClCd = torch.cat((ClCd_batch, ClCd), 0)
+                        angle = torch.cat((angle_batch, angle), 0)
+                        predicted_ClCd = torch.cat((pred_ClCd, predicted_ClCd), 0)
+                        predicted_angle = torch.cat((pred_angle, predicted_angle), 0)
 
-        # print output to tensorboard and screen
-        train_loss /= len(train_loader) * len(sample) * print_epoch  # average train loss (=train loss/sample)
-        valid_loss /= len(valid_loader) * len(sample_batched) * 1  # validation loss calculated after only 1 epoch
-        
-        writer.add_scalar("training loss", train_loss, epoch * len(train_loader) + i)
-        writer.add_scalar("validation loss", valid_loss, epoch * len(valid_loader) + i)
-        
-        print(f"epoch {epoch+1}/{num_epochs}, batch {i+1}/{len(train_loader)}.\n"
-              f"Training loss = {train_loss:.4f}, "
-              f"Validation loss = {valid_loss:.4f}\n"
-              f"ClCd RMS: {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
-              f"angle RMS: {metrics.root_mean_square(predicted_angle, angle):.2f}\n")
-        
-        train_loss = 0.
-        valid_loss = 0.
+                        valid_loss += (criterion_angle(pred_angle, angle_batch) +
+                                       criterion_ClCd(pred_ClCd, ClCd_batch)).item() * len(sample_batched)
 
+                # print output to tensorboard and screen
+                train_loss /= len(train_dataset) * 1  # average train loss (=train loss/sample)
+                valid_loss /= len(valid_dataset) * 1  # losses calculated after 1 epoch
+
+                writer.add_scalar("training loss", train_loss, epoch)  # , epoch * len(train_dataset) + i
+                writer.add_scalar("validation loss", valid_loss, epoch)  # , epoch * len(train_dataset) + i
+
+                print(f"epoch {epoch+1}/{num_epochs}, batch {i+1}/{len(train_loader)}.\n"
+                      f"Training loss = {train_loss:.4f}, "
+                      f"Validation loss = {valid_loss:.4f}\n"
+                      f"ClCd RMS: {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
+                      f"angle RMS: {metrics.root_mean_square(predicted_angle, angle):.2f}\n")
+
+                train_loss = 0.
+                valid_loss = 0.
 writer.close()
 
 # result = model.decode(model((valid_dataset[0])["coordinates"]).view(-1, num_channels, input_size))
