@@ -27,9 +27,9 @@ print_epoch = 100  # print output after n epochs (after doing all batches within
 # hyper parameters
 hidden_layers = [300, 300, 300, 300, 300, 300]
 convolutions = [6, 16, 40, 120]
-num_epochs = 3000
+num_epochs = 1500
 bs = 100
-learning_rate = 0.1  # TODO add learning rate finder
+learning_rate = 0.01  # TODO add learning rate finder
 
 # file configuration
 time_of_run = datetime.datetime.now().strftime("D%d_%m_%Y_T%H_%M_%S")
@@ -40,7 +40,7 @@ test_dir = path / 'data' / 'out' / 'test'
 print_dir = path / 'print' / time_of_run
 writer = SummaryWriter(print_dir / 'TensorBoard_events')
 if run_tensorboard:
-    TB_process = subprocess.Popen(["tensorboard", f"--logdir={path}"],  # use {print_dir} to show just this run
+    TB_process = subprocess.Popen(["tensorboard", f"--logdir={path / 'print'}"],  # {print_dir} to show just this run
                                   stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)
 
 # write log file of architecture and for note taking
@@ -66,11 +66,13 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # import datasets
 train_dataset = AD.AerofoilDataset(train_dir, transform=transforms.Compose([AD.ToTensor()]))
 valid_dataset = AD.AerofoilDataset(valid_dir, transform=transforms.Compose([AD.ToTensor()]))
+test_dataset = AD.AerofoilDataset(test_dir, transform=transforms.Compose([AD.ToTensor()]))
 num_channels, input_size, output_size = AD.AerofoilDataset.get_sizes(train_dataset)
 
 # dataloaders
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)
 valid_loader = DataLoader(dataset=valid_dataset, batch_size=bs, shuffle=False, num_workers=4)
+test_loader = DataLoader(dataset=test_dataset, batch_size=bs, shuffle=False, num_workers=4)
 
 # show aerofoils
 # show.show_aerofoil(writer, tensorboard=True, **train_dataset[0])
@@ -242,7 +244,7 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
     angle = torch.tensor([])
     predicted_ClCd = torch.tensor([])
     predicted_angle = torch.tensor([])
-    for sample_batched in valid_loader:
+    for sample_batched in test_loader:
         sample_batched["coordinates"] = sample_batched["coordinates"].view(-1, 1, input_size).to(device)
         ClCd_batch = sample_batched["y"][:, 0].to(device)
         angle_batch = sample_batched["y"][:, 1].to(device)
@@ -258,6 +260,7 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
           f"angle RMS: {metrics.root_mean_square(predicted_angle, angle):.2f}")
 
 if save_model:
+    # TODO: make this better
     print_dir = path / 'print' / time_of_run
     print_dir.mkdir(exist_ok=True)
     torch.save(model.state_dict(), print_dir / "model.pkl")  # creates pickle file

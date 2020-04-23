@@ -10,7 +10,7 @@ from random import seed, random
 
 # parameters
 seed(1)
-train_valid_split = 0.8  # percentage to split train and validation set randomly
+train_valid_test_split = [0.7, 0.2, 0.1]  # percentage to split train, validation and test sets randomly
 root_dir = Path('data')
 in_files = root_dir / 'auto_downloaded_files'
 out_files = root_dir / 'out'
@@ -21,8 +21,10 @@ shutil.rmtree(out_files)  # delete all previous outputs
 out_files.mkdir(exist_ok=True)
 train_set = out_files / 'train'
 valid_set = out_files / 'valid'
+test_set = out_files / 'test'
 train_set.mkdir(exist_ok=True)
 valid_set.mkdir(exist_ok=True)
+test_set.mkdir(exist_ok=True)
 
 Title.print_title([" ", "Chosen aerofoil dictates x coordinates of all other aerofoils"], spacing=80)
 
@@ -68,10 +70,13 @@ for aerofoil in aerofoils:
         y_target = np.append(y_top_target[:0:-1], y_bottom_target)  # remove one of the two zeros
 
         # print file
-        if random() > train_valid_split:  # move file to validation set
-            out_dest = valid_set
-        else:  # move file to train set
+        random_num = random()
+        if random_num <= train_valid_test_split[0]:  # move file to train set
             out_dest = train_set
+        elif random_num <= (train_valid_test_split[0] + train_valid_test_split[1]):  # move file to validation set
+            out_dest = valid_set
+        else:  # move file to test set
+            out_dest = test_set
 
         with open(out_dest / aerofoil, 'w') as f:
             f.write(f"{max_ClCd_angle}")

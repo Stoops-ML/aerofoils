@@ -59,6 +59,5 @@ for line in response:
                   f"URL identifier: {url_identifier}\n"
                   f"Error: {excp}\n")
 
-
 print(f"Number of aerofoils downloaded = {len(os.listdir(out_dir))}")
 print(f"Number of aerofoils ignored = {aerofoils_ignored}")
