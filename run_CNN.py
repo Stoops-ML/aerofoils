@@ -22,8 +22,16 @@ import subprocess
 
 # output switches
 save_model = False
-print_activations = True
+print_activations = False
 run_tensorboard = True
+print_epoch = 100  # print output after n epochs (after doing all batches within epoch) 
+
+# hyper parameters
+hidden_layers = [300, 300, 300, 300, 300, 300]
+convolutions = [6, 16, 40, 120]
+num_epochs = 3000
+bs = 100
+learning_rate = 0.01  # TODO add learning rate finder
 
 # file configuration
 time_of_run = datetime.datetime.now().strftime("D%d_%m_%Y_T%H_%M_%S")
@@ -34,7 +42,7 @@ test_dir = path / 'data' / 'out' / 'test'
 print_dir = path / 'print' / time_of_run
 writer = SummaryWriter(print_dir / 'runs')
 if run_tensorboard:
-    TB_process = subprocess.Popen(["tensorboard", f"--logdir={print_dir/'runs'}"],
+    TB_process = subprocess.Popen(["tensorboard", f"--logdir={path}"],  # use {print_dir} to show just this run
                                   stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)
 
 # title sequence
@@ -45,14 +53,7 @@ Title.print_title([" ", "Convolutional neural network", "Outputs: Max ClCd @ ang
 
 # device configuration
 torch.manual_seed(0)
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-# hyper parameters
-hidden_layers = [300, 300, 300, 300, 300, 300]
-convolutions = [6, 16, 40, 120]
-num_epochs = 1
-bs = 100
-learning_rate = 0.01  # TODO add learning rate finder
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # import datasets
 train_dataset = AD.AerofoilDataset(train_dir, transform=transforms.Compose([AD.ToTensor()]))
@@ -159,7 +160,8 @@ writer.close()
 
 # training loop
 model.train()  # needed?
-running_loss = 0.
+train_loss = 0.
+valid_loss = 0.
 for epoch in (range(num_epochs)):  # tqdm doesn't seem to work with nested loops with one progress bar
     for i, sample in enumerate(train_loader):
         # reshape input to column vector
@@ -172,18 +174,15 @@ for epoch in (range(num_epochs)):  # tqdm doesn't seem to work with nested loops
         loss_ClCd = criterion_ClCd(pred_ClCd, ClCd_batch)
         loss_angle = criterion_angle(pred_angle, angle_batch)
         loss = loss_ClCd + loss_angle
-        running_loss += loss.item()
+        train_loss += loss.item() * len(sample)   # loss.item() returns average loss per sample in batch
 
         # backward pass
         optimiser.zero_grad()
         loss.backward()
         optimiser.step()
 
-    # print output
-    if (epoch+1) % 100 == 0:
-        writer.add_scalar("training loss", running_loss / 1, epoch * len(train_loader) + i)  # /1 because 1 steps
-        running_loss = 0.
-        valid_loss = 0.
+    # calculate validation loss
+    if (epoch+1) % print_epoch == 0:
         # TODO make better variable names here
         with torch.no_grad():  # don't add gradients of test set to computational graph
             ClCd = torch.tensor([])
@@ -201,16 +200,27 @@ for epoch in (range(num_epochs)):  # tqdm doesn't seem to work with nested loops
                 predicted_ClCd = torch.cat((pred_ClCd, predicted_ClCd), 0)
                 predicted_angle = torch.cat((pred_angle, predicted_angle), 0)
 
-                valid_loss += criterion_angle(pred_angle, angle_batch).item() + \
-                              criterion_ClCd(pred_ClCd, ClCd_batch).item()
-                writer.add_scalar("validation loss", valid_loss / 1, epoch * len(train_loader) + i)  # /1 is average over number of iterations (not epochs)
+                valid_loss += (criterion_angle(pred_angle, angle_batch) +
+                               criterion_ClCd(pred_ClCd, ClCd_batch)).item() * len(sample_batched)
 
-        print(f"epoch {epoch+1}/{num_epochs}, step {i+1}/{len(train_loader)}.\n"
-              f"Validation loss = {loss.item():.4f}\n"
+        # print output to tensorboard and screen
+        train_loss /= len(train_loader) * len(sample) * print_epoch  # average train loss (=train loss/sample)
+        valid_loss /= len(valid_loader) * len(sample_batched) * 1  # validation loss calculated after only 1 epoch
+        
+        writer.add_scalar("training loss", train_loss, epoch * len(train_loader) + i)
+        writer.add_scalar("validation loss", valid_loss, epoch * len(valid_loader) + i)
+        
+        print(f"epoch {epoch+1}/{num_epochs}, batch {i+1}/{len(train_loader)}.\n"
+              f"Training loss = {train_loss:.4f}, "
+              f"Validation loss = {valid_loss:.4f}\n"
               f"ClCd RMS: {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
               f"angle RMS: {metrics.root_mean_square(predicted_angle, angle):.2f}\n")
+        
+        train_loss = 0.
+        valid_loss = 0.
 
 writer.close()
+
 # result = model.decode(model((valid_dataset[0])["coordinates"]).view(-1, num_channels, input_size))
 # draw resulting image (in link)
 
@@ -233,9 +243,9 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
         predicted_ClCd = torch.cat((pred_ClCd, predicted_ClCd), 0)
         predicted_angle = torch.cat((pred_angle, predicted_angle), 0)
 
-print("Test set results:\n"
-      f"ClCd RMS: {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
-      f"angle RMS: {metrics.root_mean_square(predicted_angle, angle):.2f}")
+    print("Test set results:\n"
+          f"ClCd RMS: {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
+          f"angle RMS: {metrics.root_mean_square(predicted_angle, angle):.2f}")
 
 if save_model:
     print_dir = path / 'print' / time_of_run
@@ -250,6 +260,7 @@ if save_model:
 
 # Visualize feature maps
 if print_activations:
+    # TODO: add this to tensorboard
     activation = {}
     def get_activation(name):
         def hook(_, __, output):
@@ -262,16 +273,17 @@ if print_activations:
     output = model(sample.view(1, num_channels, input_size).float().to(device))
 
     act = activation['conv6'].squeeze()
-    # fig, axarr = plt.subplots(act.size(0))
+    fig, axarr = plt.subplots(act.size(0))
 
-    # for idx in range(act.size(0)):
-    # axarr[idx].plot(act[idx])
-    # plt.plot(act[idx])
-
-    # print aerofoil
-
+    for idx in range(act.size(0)):
+        axarr[idx].plot(act[idx])
+        plt.plot(act[idx])
 
 # kill TensorBoard
 if run_tensorboard:
-    input("\nPress Enter to kill TensorBoard...")
-    subprocess.Popen(["kill", "-9", f"{TB_process.pid}"])
+    TB_close = input("\nPress Y to kill TensorBoard...\n")
+    if re.search('[yY]+', TB_close):
+        subprocess.Popen(["kill", "-9", f"{TB_process.pid}"])
+        print("TensorBoard closed.")
+    else:
+        print("TensorBorad will remain open.")

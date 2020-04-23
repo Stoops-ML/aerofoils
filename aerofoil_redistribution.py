@@ -20,9 +20,9 @@ chosen_aerofoil_x = 'NACA_24112.csv'  # use x coordinates of this file for all o
 shutil.rmtree(out_files)  # delete all previous outputs
 out_files.mkdir(exist_ok=True)
 train_set = out_files / 'train'
-test_set = out_files / 'test'
+valid_set = out_files / 'valid'
 train_set.mkdir(exist_ok=True)
-test_set.mkdir(exist_ok=True)
+valid_set.mkdir(exist_ok=True)
 
 Title.print_title([" ", "Chosen aerofoil dictates x coordinates of all other aerofoils"], spacing=80)
 
@@ -71,7 +71,7 @@ for aerofoil in aerofoils:
 
         # print file
         if random() > train_valid_split:  # move file to validation set
-            out_dest = test_set
+            out_dest = valid_set
         else:  # move file to train set
             out_dest = train_set
 
