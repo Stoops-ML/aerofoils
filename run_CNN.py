@@ -263,26 +263,28 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
         loss = loss_ClCd + loss_angle
         losses[sample_batched["aerofoil"][0]] = loss.item()
 
-        with open(print_dir / "test_set_results.txt", 'a') as f:
-            for i, (pred_angle, pred_ClCd, y_angle, y_ClCd, aerofoil) in enumerate(zip(pred_angle, pred_ClCd, target_angle, target_ClCd, sample_batched["aerofoil"])):
-                f.write(f"{i + 1}. {aerofoil}:\n"
-                        f"predicted angle = {pred_angle:.2f}, target angle = {y_angle:.2f}\n"
-                        f"predicted ClCd = {pred_ClCd:.2f}, target ClCd = {y_ClCd:.2f}\n\n")
+        # with open(print_dir / "test_set_results.txt", 'a') as f:
+        #     for i, (pred_angle, pred_ClCd, y_angle, y_ClCd, aerofoil) in enumerate(zip(pred_angle, pred_ClCd, target_angle, target_ClCd, sample_batched["aerofoil"])):
+        #         f.write(f"{i + 1}. {aerofoil}:\n"
+        #                 f"predicted angle = {pred_angle:.2f}, target angle = {y_angle:.2f}\n"
+        #                 f"predicted ClCd = {pred_ClCd:.2f}, target ClCd = {y_ClCd:.2f}\n\n")
 
     top_losses = metrics.top_losses(losses)
-    print(top_losses)
-    sys.exit()
 
     print("Test set results:\n"
           f"ClCd RMS: {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
           f"angle RMS: {metrics.root_mean_square(predicted_angle, angle):.2f}")
 
-with open(print_dir / "test_set_results.txt", 'a') as f:
+with open(print_dir / "test_set_results.txt", 'w') as f:  # not appending!
     f.write(f"\nNumber of epochs = {num_epochs}\n"
             f"ClCd: overall RMS = {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
             f"overall R2 = {metrics.R2_score(predicted_ClCd, ClCd):.2f}\n"
             f"angle: overall RMS = {metrics.root_mean_square(predicted_angle, angle):.2f}, "
-            f"overall R2 = {metrics.R2_score(predicted_angle, angle):.2f}\n")
+            f"overall R2 = {metrics.R2_score(predicted_angle, angle):.2f}\n\n"
+            f"Top losses:\n")
+
+    for k, v in top_losses.items():
+        f.write(f". {k}: {v:.2f}\n")
 
 # Visualize feature maps
 if print_activations:
