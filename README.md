@@ -6,7 +6,7 @@ Aerofoils downloaded from airfoiltools.com, with aerodynamic data provided by XF
 
 # To Do
 - create aerofoil augmentation script.
-- transpose the convolutions.
+- write the decoder (transpose of convolutions).
 
 # Notes
 - neural network depreciated. Current work is being completed on the convolutional neural network only.
