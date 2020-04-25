@@ -26,9 +26,9 @@ print_epoch = 100  # print output after n epochs (after doing all batches within
 # hyper parameters
 hidden_layers = [300, 300, 300, 300, 300, 300]
 convolutions = [6, 16, 40, 120]
-num_epochs = 1
+num_epochs = 3000
 bs = 25
-learning_rate = 0.2  # TODO add learning rate finder
+learning_rate = 0.01  # TODO add learning rate finder
 
 # file configuration
 time_of_run = datetime.datetime.now().strftime("D%d_%m_%Y_T%H_%M_%S")
@@ -108,23 +108,24 @@ class ConvNet(nn.Module):
             nn.Linear(self.image_size * convolutions[-1], hidden_layers[0]),
             nn.BatchNorm1d(num_features=num_channels),
             nn.ReLU(),
-            nn.Linear(hidden_layers[0], hidden_layers[1]),
+            # nn.Linear(hidden_layers[0], hidden_layers[1]),
+            nn.Linear(hidden_layers[0], num_outputs),
             nn.BatchNorm1d(num_features=num_channels),
-            nn.ReLU(),
-            nn.Linear(hidden_layers[1], hidden_layers[2]),
-            nn.BatchNorm1d(num_features=num_channels),
-            nn.ReLU(),
-            nn.Linear(hidden_layers[2], hidden_layers[3]),
-            nn.BatchNorm1d(num_features=num_channels),
-            nn.ReLU(),
-            nn.Linear(hidden_layers[3], hidden_layers[4]),
-            nn.BatchNorm1d(num_features=num_channels),
-            nn.ReLU(),
-            nn.Linear(hidden_layers[4], hidden_layers[5]),
-            nn.BatchNorm1d(num_features=num_channels),
-            nn.ReLU(),
-            nn.Linear(hidden_layers[5], num_outputs),
-            nn.BatchNorm1d(num_features=num_channels)
+            # nn.ReLU(),
+            # nn.Linear(hidden_layers[1], hidden_layers[2]),
+            # nn.BatchNorm1d(num_features=num_channels),
+            # nn.ReLU(),
+            # nn.Linear(hidden_layers[2], hidden_layers[3]),
+            # nn.BatchNorm1d(num_features=num_channels),
+            # nn.ReLU(),
+            # nn.Linear(hidden_layers[3], hidden_layers[4]),
+            # nn.BatchNorm1d(num_features=num_channels),
+            # nn.ReLU(),
+            # nn.Linear(hidden_layers[4], hidden_layers[5]),
+            # nn.BatchNorm1d(num_features=num_channels),
+            # nn.ReLU(),
+            # nn.Linear(hidden_layers[5], num_outputs),
+            # nn.BatchNorm1d(num_features=num_channels)
             )
 
         # TODO: fix the decoder: https://stackoverflow.com/questions/55033669/encoding-and-decoding-pictures-pytorch
@@ -213,8 +214,8 @@ for epoch in (range(num_epochs)):  # tqdm doesn't seem to work with nested loops
                         predicted_ClCd = torch.cat((pred_ClCd, predicted_ClCd), 0)
                         predicted_angle = torch.cat((pred_angle, predicted_angle), 0)
 
-                    valid_loss += (criterion_angle(pred_angle, angle_batch) +
-                                   criterion_ClCd(pred_ClCd, ClCd_batch)).item() * len(sample_batched)
+                        valid_loss += (criterion_angle(pred_angle, angle_batch) +
+                                       criterion_ClCd(pred_ClCd, ClCd_batch)).item() * len(sample_batched)
 
                 # print output to tensorboard and screen
                 train_loss /= len(train_dataset) * 1  # average train loss (=train loss/sample)
