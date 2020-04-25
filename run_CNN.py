@@ -19,17 +19,16 @@ import math
 import subprocess
 
 # output switches
-save_model = False
 print_activations = False
 run_tensorboard = True
-print_epoch = 100  # print output after n epochs (after doing all batches within epoch) 
+print_epoch = 100  # print output after n epochs (after doing all batches within epoch)
 
 # hyper parameters
 hidden_layers = [300, 300, 300, 300, 300, 300]
 convolutions = [6, 16, 40, 120]
-num_epochs = 1500
-bs = 100
-learning_rate = 0.01  # TODO add learning rate finder
+num_epochs = 1
+bs = 25
+learning_rate = 0.2  # TODO add learning rate finder
 
 # file configuration
 time_of_run = datetime.datetime.now().strftime("D%d_%m_%Y_T%H_%M_%S")
@@ -54,10 +53,9 @@ with open(print_dir / "log.txt", 'w') as f:
     f.write(f"Convolutions = {convolutions}\n")
 
 # title sequence
-save_model_str = "MODEL WILL BE SAVED" if save_model else "Model will NOT be saved"
 run_tensorboard_str = "TENSORBOARD RUNNING" if run_tensorboard else "TensorBoard not running"
-Title.print_title([" ", "Convolutional neural network", "Outputs: Max ClCd @ angle", f"{save_model_str}",
-                   f"{run_tensorboard_str}", f"Print directory: {'print/' + time_of_run}"])
+Title.print_title([" ", "Convolutional neural network", "Outputs: Max ClCd @ angle",
+                   f"{run_tensorboard_str}", f"Output directory: {'print/' + time_of_run}"])
 
 # device configuration
 torch.manual_seed(0)
@@ -71,8 +69,8 @@ num_channels, input_size, output_size = AD.AerofoilDataset.get_sizes(train_datas
 
 # dataloaders
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)
-valid_loader = DataLoader(dataset=valid_dataset, batch_size=bs, shuffle=False, num_workers=4)
-test_loader = DataLoader(dataset=test_dataset, batch_size=bs, shuffle=False, num_workers=4)
+valid_loader = DataLoader(dataset=valid_dataset, batch_size=bs, shuffle=True, num_workers=4)
+test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=4)  # bs = 1 for top_losses()
 
 # show aerofoils
 # show.show_aerofoil(writer, tensorboard=True, **train_dataset[0])
@@ -87,7 +85,9 @@ class ConvNet(nn.Module):
         stride = 2
         padding = 0
 
+        # TODO: normalise the y values
         # TODO: do batchnorms after every convolution?
+        # TODO: too much pooling?
         self.convolutions = nn.Sequential(
             nn.Conv1d(num_channels, convolutions[0], filter_size),  # 2 input channels (of 1D): x and y coords
             nn.MaxPool1d(2, stride),
@@ -124,8 +124,8 @@ class ConvNet(nn.Module):
             nn.BatchNorm1d(num_features=num_channels),
             nn.ReLU(),
             nn.Linear(hidden_layers[5], num_outputs),
-            nn.BatchNorm1d(num_features=num_channels))
-        # do i have to multiply the y values of the predictions by the normalised values?
+            nn.BatchNorm1d(num_features=num_channels)
+            )
 
         # TODO: fix the decoder: https://stackoverflow.com/questions/55033669/encoding-and-decoding-pictures-pytorch
         # https://discuss.pytorch.org/t/visualize-feature-map/29597/6
@@ -159,9 +159,9 @@ class ConvNet(nn.Module):
 model = ConvNet(input_size, hidden_layers, output_size, convolutions).to(device)
 
 # loss and optimiser
-criterion_ClCd = nn.MSELoss()
-criterion_angle = nn.MSELoss()
-optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
+criterion_ClCd = nn.SmoothL1Loss()
+criterion_angle = nn.SmoothL1Loss()
+optimiser = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
 # structure of model
 for sample in train_loader:
@@ -213,8 +213,8 @@ for epoch in (range(num_epochs)):  # tqdm doesn't seem to work with nested loops
                         predicted_ClCd = torch.cat((pred_ClCd, predicted_ClCd), 0)
                         predicted_angle = torch.cat((pred_angle, predicted_angle), 0)
 
-                        valid_loss += (criterion_angle(pred_angle, angle_batch) +
-                                       criterion_ClCd(pred_ClCd, ClCd_batch)).item() * len(sample_batched)
+                    valid_loss += (criterion_angle(pred_angle, angle_batch) +
+                                   criterion_ClCd(pred_ClCd, ClCd_batch)).item() * len(sample_batched)
 
                 # print output to tensorboard and screen
                 train_loss /= len(train_dataset) * 1  # average train loss (=train loss/sample)
@@ -232,6 +232,7 @@ for epoch in (range(num_epochs)):  # tqdm doesn't seem to work with nested loops
                 train_loss = 0.
                 valid_loss = 0.
 writer.close()
+torch.save(model.state_dict(), print_dir / "model.pkl")  # create pickle file
 
 # result = model.decode(model((valid_dataset[0])["coordinates"]).view(-1, num_channels, input_size))
 # draw resulting image (in link)
@@ -239,6 +240,7 @@ writer.close()
 # test set
 # note this is actually using the validation dataset
 model.eval()  # turn off batch normalisation and dropout
+losses = {}
 with torch.no_grad():  # don't add gradients of test set to computational graph
     ClCd = torch.tensor([])
     angle = torch.tensor([])
@@ -246,30 +248,41 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
     predicted_angle = torch.tensor([])
     for sample_batched in test_loader:
         sample_batched["coordinates"] = sample_batched["coordinates"].view(-1, 1, input_size).to(device)
-        ClCd_batch = sample_batched["y"][:, 0].to(device)
-        angle_batch = sample_batched["y"][:, 1].to(device)
+        target_ClCd = sample_batched["y"][:, 0].to(device)
+        target_angle = sample_batched["y"][:, 1].to(device)
 
         pred_ClCd, pred_angle = model(sample_batched["coordinates"].float())
-        ClCd = torch.cat((ClCd_batch, ClCd), 0)
-        angle = torch.cat((angle_batch, angle), 0)
+        ClCd = torch.cat((target_ClCd, ClCd), 0)
+        angle = torch.cat((target_angle, angle), 0)
         predicted_ClCd = torch.cat((pred_ClCd, predicted_ClCd), 0)
         predicted_angle = torch.cat((pred_angle, predicted_angle), 0)
+
+        # get losses
+        loss_ClCd = criterion_ClCd(pred_ClCd, target_ClCd)
+        loss_angle = criterion_angle(pred_angle, target_angle)
+        loss = loss_ClCd + loss_angle
+        losses[sample_batched["aerofoil"][0]] = loss.item()
+
+        with open(print_dir / "test_set_results.txt", 'a') as f:
+            for i, (pred_angle, pred_ClCd, y_angle, y_ClCd, aerofoil) in enumerate(zip(pred_angle, pred_ClCd, target_angle, target_ClCd, sample_batched["aerofoil"])):
+                f.write(f"{i + 1}. {aerofoil}:\n"
+                        f"predicted angle = {pred_angle:.2f}, target angle = {y_angle:.2f}\n"
+                        f"predicted ClCd = {pred_ClCd:.2f}, target ClCd = {y_ClCd:.2f}\n\n")
+
+    top_losses = metrics.top_losses(losses)
+    print(top_losses)
+    sys.exit()
 
     print("Test set results:\n"
           f"ClCd RMS: {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
           f"angle RMS: {metrics.root_mean_square(predicted_angle, angle):.2f}")
 
-if save_model:
-    # TODO: make this better
-    print_dir = path / 'print' / time_of_run
-    print_dir.mkdir(exist_ok=True)
-    torch.save(model.state_dict(), print_dir / "model.pkl")  # creates pickle file
-    with open(print_dir / "RESULTS.txt", 'w') as f:
-        f.write(f"Number of epochs = {num_epochs}\n"
-            f"ClCd: RMS = {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
-            f"R2 = {metrics.R2_score(predicted_ClCd, ClCd):.2f}\n"
-            f"angle: RMS = {metrics.root_mean_square(predicted_angle, angle):.2f}, "
-            f"R2 = {metrics.R2_score(predicted_angle, angle):.2f}\n")
+with open(print_dir / "test_set_results.txt", 'a') as f:
+    f.write(f"\nNumber of epochs = {num_epochs}\n"
+            f"ClCd: overall RMS = {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
+            f"overall R2 = {metrics.R2_score(predicted_ClCd, ClCd):.2f}\n"
+            f"angle: overall RMS = {metrics.root_mean_square(predicted_angle, angle):.2f}, "
+            f"overall R2 = {metrics.R2_score(predicted_angle, angle):.2f}\n")
 
 # Visualize feature maps
 if print_activations:

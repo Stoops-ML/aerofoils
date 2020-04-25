@@ -9,7 +9,7 @@ import TitleSequence as Title
 from random import seed, random
 
 # parameters
-seed(1)
+seed(42)
 train_valid_test_split = [0.7, 0.2, 0.1]  # percentage to split train, validation and test sets randomly
 root_dir = Path('data')
 in_files = root_dir / 'auto_downloaded_files'
@@ -44,7 +44,28 @@ with open(in_files / chosen_aerofoil_x) as f:
             x_target.append(float(xy[0]))
 x_target_half = x_target[len(x_target) // 2:]  # x target is symmetrical top and bottom
 
+# mean of ClCd and angle
+# ClCd_list = []
+# angle_list = []
+# for aerofoil in aerofoils:
+#     with open(in_files / aerofoil) as f:
+#         for line in f:
+#             if 'ClCd' in line:
+#                 outputs = [num for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']
+#                 ClCd_list.append(float(outputs[0]))
+#                 angle_list.append(float(outputs[1]))
+#                 break
+# ClCd_mean = sum(ClCd_list) / len(aerofoils)
+# angle_mean = sum(angle_list) / len(aerofoils)
+
+# # standard deviation of ClCd and angle
+# ClCd_list_SD = [(ClCd - ClCd_mean)**2 for ClCd in ClCd_list]
+# angle_list_SD = [(angle - angle_mean)**2 for angle in angle_list]
+# ClCd_SD = np.sqrt(1/len(aerofoils) * sum(ClCd_list_SD))
+# angle_SD = np.sqrt(1/len(aerofoils) * sum(angle_list_SD))
+
 # make all aerofoils same size
+
 for aerofoil in aerofoils:
     try:
         x_coord = []
@@ -55,6 +76,9 @@ for aerofoil in aerofoils:
                     continue
                 if 'ClCd' in line:
                     max_ClCd_angle = line
+                    # outputs = [num for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']
+                    # ClCd = (float(outputs[0]) - ClCd_mean) / ClCd_SD
+                    # angle = (float(outputs[1]) - angle_mean) / angle_SD
                 else:
                     xy = [num for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']
                     x_coord.append(float(xy[0]))
@@ -79,7 +103,8 @@ for aerofoil in aerofoils:
             out_dest = test_set
 
         with open(out_dest / aerofoil, 'w') as f:
-            f.write(f"{max_ClCd_angle}")
+            # f.write(f"Max ClCd {ClCd:.4f} at {angle:.4f}deg\n")
+            f.write(max_ClCd_angle)
             for x, y in zip(x_target, y_target):
                 f.write(f"{x:.4f} {y:.4f}\n")
 
@@ -92,4 +117,10 @@ for aerofoil in aerofoils:
               f"Error: {exc}.\n")
 
 print(f"Code finished. Output folder: {out_files}.\n"
-      f"Number of coordinates in every aerofoil file: {len(x_target)}")
+      f"Number of coordinates in every aerofoil file: {len(x_target)}.\n")
+      # f"Mean angle = {angle_mean:.2f}, standard deviation angle = {angle_SD:.2f}.\n"
+      # f"Mean ClCd = {ClCd_mean:.2f}, standard deviation ClCd = {ClCd_SD:.2f}.")
+
+# with open(out_files / "Normalising_values.txt", 'w') as f:
+#     f.write(f"Mean angle = {angle_mean:.2f}, standard deviation angle = {angle_SD:.2f}.\n"
+#             f"Mean ClCd = {ClCd_mean:.2f}, standard deviation ClCd = {ClCd_SD:.2f}.")

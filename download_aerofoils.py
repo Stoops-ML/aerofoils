@@ -13,18 +13,17 @@ aerofoils_ignored = 0
 response = request.urlopen('http://airfoiltools.com/search/airfoils')
 for line in response:
     line_str = str(line, 'utf-8')  # convert bytes to string
-    line_with_aerofoil = re.findall(r'">.{,15} - ', line_str)
+    line_with_aerofoils = re.findall(r'">.{,15} - ', line_str)  # find all aerofoils on one line of source code
 
-    if line_with_aerofoil:
-        for aerofoil_found in line_with_aerofoil:
-            url_find = re.search(r'^(">)(.+) - ', aerofoil_found)  # TODO: combine with above regex
+    if line_with_aerofoils:
+        for aerofoil_found in line_with_aerofoils:
+            url_find = re.search(r'^(">)(.+) - ', aerofoil_found)
             url_identifier = url_find.group(2)
             aerofoil_name_find = re.search(r'[\w\d]+', url_identifier)
             aerofoil_name = aerofoil_name_find.group()
 
             if Path.exists(out_dir / (aerofoil_name + ".csv")):
                 continue
-
 
             try:
                 # get coordinates
