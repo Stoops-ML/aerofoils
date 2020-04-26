@@ -44,7 +44,8 @@ class AerofoilDataset(Dataset):
             self.y[item] = self.transform(self.y[item])
 
         # return must be in this form for dataloader to be an iterator (therefore can't be a dictionary)
-        return self.x[item].view(self.num_channels, self.input_size), self.y[item], self.aerofoil[item]
+        return self.x[item].view(self.num_channels, self.input_size), self.y[item].view(1, self.output_size),\
+               self.aerofoil[item]
 
     def __len__(self):
         """get length of dataset"""
