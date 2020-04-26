@@ -45,10 +45,10 @@ for line in response:
                     line_data_str = str(line_data, 'utf-8')  # convert bytes to string
                     line_with_data = re.search(r'(">).{,40}(deg;)', line_data_str)
                     if line_with_data:
-                        ClCd_angle = [num for num in re.findall(r'([+-]?\d*[.]?\d*)', line_with_data.group()) if num != '']
+                        ClCd_angle = [float(num) for num in re.findall(r'([+-]?\d*[.]?\d*)', line_with_data.group()) if num != '']
                         break  # we want the first values, which occur at Re = 50,000, Ncrit = 9
-                max_ClCd = float(ClCd_angle[0])
-                angle = float(ClCd_angle[1])
+                max_ClCd = ClCd_angle[0]
+                angle = ClCd_angle[1]
 
                 # print aerofoil file
                 with open(out_dir / (aerofoil_name + ".csv"), 'w') as f:

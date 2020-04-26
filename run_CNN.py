@@ -15,17 +15,18 @@ import AerofoilDataset as AD
 import TitleSequence as Title
 from torch.utils.tensorboard import SummaryWriter
 import sys
-import math
 import subprocess
+from torch_lr_finder import LRFinder
+
 
 # output switches
+find_LR = True
 print_activations = False
-run_tensorboard = True
 print_epoch = 100  # print output after n epochs (after doing all batches within epoch)
 
 # hyper parameters
-hidden_layers = [300, 300, 300, 300, 300, 300]
-convolutions = [6, 16, 40, 120]
+hidden_layers = [300]
+convolutions = [6]  # , 16, 40, 120]
 num_epochs = 3000
 bs = 25
 learning_rate = 0.01  # TODO add learning rate finder
@@ -38,9 +39,8 @@ valid_dir = path / 'data' / 'out' / 'valid'
 test_dir = path / 'data' / 'out' / 'test'
 print_dir = path / 'print' / time_of_run
 writer = SummaryWriter(print_dir / 'TensorBoard_events')
-if run_tensorboard:
-    TB_process = subprocess.Popen(["tensorboard", f"--logdir={path / 'print'}"],  # {print_dir} to show just this run
-                                  stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)
+TB_process = subprocess.Popen(["tensorboard", f"--logdir={path / 'print'}"], stdout=open(os.devnull, 'w'),
+                              stderr=subprocess.STDOUT)  # {print_dir} to show just this run
 
 # write log file of architecture and for note taking
 with open(print_dir / "log.txt", 'w') as f:
@@ -53,9 +53,8 @@ with open(print_dir / "log.txt", 'w') as f:
     f.write(f"Convolutions = {convolutions}\n")
 
 # title sequence
-run_tensorboard_str = "TENSORBOARD RUNNING" if run_tensorboard else "TensorBoard not running"
 Title.print_title([" ", "Convolutional neural network", "Outputs: Max ClCd @ angle",
-                   f"{run_tensorboard_str}", f"Output directory: {'print/' + time_of_run}"])
+                   "TensorBoardX running", f"Output directory: {'print/' + time_of_run}"])
 
 # device configuration
 torch.manual_seed(0)
@@ -81,28 +80,28 @@ test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_
 class ConvNet(nn.Module):
     def __init__(self, input_size, hidden_layers, num_outputs, convolutions):
         super(ConvNet, self).__init__()
-        filter_size = 2
+        kernel_size = 2
         stride = 2
-        padding = 0
+        dilation = 1  # default of nn.Conv1d = 1
+        padding = ((input_size - 1) * stride - input_size + kernel_size + (kernel_size - 1) * (dilation - 1)
+                   ) // 2
+        self.image_size = (input_size + 2 * padding - kernel_size - (kernel_size - 1) * (dilation - 1))\
+                          // stride + 1  # image size according to padding (as padding might not actually be an int)
 
         # TODO: normalise the y values
         # TODO: do batchnorms after every convolution?
         # TODO: too much pooling?
-        self.convolutions = nn.Sequential(
-            nn.Conv1d(num_channels, convolutions[0], filter_size),  # 2 input channels (of 1D): x and y coords
-            nn.MaxPool1d(2, stride),
-            nn.Conv1d(convolutions[0], convolutions[1], filter_size),
-            nn.MaxPool1d(2, stride),
-            nn.Conv1d(convolutions[1], convolutions[2], filter_size),
-            nn.MaxPool1d(2, stride),
-            nn.Conv1d(convolutions[2], convolutions[3], filter_size),
-            nn.MaxPool1d(2, stride))
 
-        image_size = input_size
-        for _ in range(len(convolutions)):
-            calc = int(math.floor((image_size - filter_size + 2*padding) / stride + 1))
-            image_size = calc
-        self.image_size = calc - 1
+        self.extractor = nn.Sequential(
+            nn.Conv1d(num_channels, convolutions[0], kernel_size, padding=padding, padding_mode='reflect'),  # 2 input channels (of 1D): x and y coords
+            nn.MaxPool1d(2, stride),
+            # nn.Conv1d(convolutions[0], convolutions[1], kernel_size, padding=padding, padding_mode='reflect'),
+            # nn.MaxPool1d(2, stride),
+            # nn.Conv1d(convolutions[1], convolutions[2], kernel_size, padding=padding, padding_mode='reflect'),
+            # nn.MaxPool1d(2, stride),
+            # nn.Conv1d(convolutions[2], convolutions[3], kernel_size, padding=padding, padding_mode='reflect'),
+            # nn.MaxPool1d(2, stride)
+        )
 
         self.fully_connected = nn.Sequential(
             nn.Linear(self.image_size * convolutions[-1], hidden_layers[0]),
@@ -130,14 +129,14 @@ class ConvNet(nn.Module):
 
         # TODO: fix the decoder: https://stackoverflow.com/questions/55033669/encoding-and-decoding-pictures-pytorch
         # https://discuss.pytorch.org/t/visualize-feature-map/29597/6
-        self.decoder = torch.nn.Sequential(
-            nn.ConvTranspose1d(convolutions[3], convolutions[2], filter_size),
+        # self.decoder = torch.nn.Sequential(
+            # nn.ConvTranspose1d(convolutions[3], convolutions[2], filter_size),
             # nn.ReLU(),
-            nn.ConvTranspose1d(convolutions[2], convolutions[1], filter_size),
-            nn.ConvTranspose1d(convolutions[1], num_channels, filter_size))
+            # nn.ConvTranspose1d(convolutions[2], convolutions[1], filter_size),
+            # nn.ConvTranspose1d(convolutions[1], num_channels, filter_size))
 
     def forward(self, x):
-        out = self.convolutions(x)
+        out = self.extractor(x)
         out = out.view(-1, 1, self.image_size * convolutions[-1])  # -1 for number of aerofoils in batch
         out = self.fully_connected(out)
 
@@ -164,9 +163,16 @@ criterion_ClCd = nn.SmoothL1Loss()
 criterion_angle = nn.SmoothL1Loss()
 optimiser = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
+if find_LR:
+    lr_finder = LRFinder(model, optimiser, criterion_ClCd, device=device)
+    lr_finder.range_test(train_loader, end_lr=100, num_iter=100)
+    lr_finder.plot()  # to inspect the loss-learning rate graph
+    lr_finder.reset()  # to reset the model and optimizer to their initial state
+    sys.exit()
+
 # structure of model
 for sample in train_loader:
-    writer.add_graph(model, sample["coordinates"].view(-1, 1, input_size).float())
+    writer.add_graph(model, sample[0].view(-1, 1, input_size).float())
 writer.close()
 
 # training loop
@@ -176,12 +182,12 @@ valid_loss = 0.
 for epoch in (range(num_epochs)):  # tqdm doesn't seem to work with nested loops with one progress bar
     for i, sample in enumerate(train_loader):
         # reshape input to column vector
-        sample["coordinates"] = sample["coordinates"].view(-1, 1, input_size).to(device)
-        ClCd_batch = sample["y"][:, 0].to(device)
-        angle_batch = sample["y"][:, 1].to(device)
+        sample_coords = sample[0].view(-1, 1, input_size).to(device)
+        ClCd_batch = sample[1][:, 0].to(device)
+        angle_batch = sample[1][:, 1].to(device)
 
         # forward pass
-        pred_ClCd, pred_angle = model(sample["coordinates"].float())
+        pred_ClCd, pred_angle = model(sample_coords.float())
         loss_ClCd = criterion_ClCd(pred_ClCd, ClCd_batch)
         loss_angle = criterion_angle(pred_angle, angle_batch)
         loss = loss_ClCd + loss_angle
@@ -204,11 +210,11 @@ for epoch in (range(num_epochs)):  # tqdm doesn't seem to work with nested loops
                     predicted_ClCd = torch.tensor([])
                     predicted_angle = torch.tensor([])
                     for sample_batched in valid_loader:
-                        sample_batched["coordinates"] = sample_batched["coordinates"].view(-1, 1, input_size).to(device)
-                        ClCd_batch = sample_batched["y"][:, 0].to(device)
-                        angle_batch = sample_batched["y"][:, 1].to(device)
+                        sample_batched_coords = sample_batched[0].view(-1, 1, input_size).to(device)
+                        ClCd_batch = sample_batched[1][:, 0].to(device)
+                        angle_batch = sample_batched[1][:, 1].to(device)
 
-                        pred_ClCd, pred_angle = model(sample_batched["coordinates"].float())
+                        pred_ClCd, pred_angle = model(sample_batched_coords.float())
                         ClCd = torch.cat((ClCd_batch, ClCd), 0)
                         angle = torch.cat((angle_batch, angle), 0)
                         predicted_ClCd = torch.cat((pred_ClCd, predicted_ClCd), 0)
@@ -227,8 +233,8 @@ for epoch in (range(num_epochs)):  # tqdm doesn't seem to work with nested loops
                 print(f"epoch {epoch+1}/{num_epochs}, batch {i+1}/{len(train_loader)}.\n"
                       f"Training loss = {train_loss:.4f}, "
                       f"Validation loss = {valid_loss:.4f}\n"
-                      f"ClCd RMS: {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
-                      f"angle RMS: {metrics.root_mean_square(predicted_angle, angle):.2f}\n")
+                      f"Validation set RMS: ClCd = {metrics.root_mean_square(predicted_ClCd, ClCd):.2f}, "
+                      f"angle = {metrics.root_mean_square(predicted_angle, angle):.2f}\n")
 
                 train_loss = 0.
                 valid_loss = 0.
@@ -248,11 +254,11 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
     predicted_ClCd = torch.tensor([])
     predicted_angle = torch.tensor([])
     for sample_batched in test_loader:
-        sample_batched["coordinates"] = sample_batched["coordinates"].view(-1, 1, input_size).to(device)
-        target_ClCd = sample_batched["y"][:, 0].to(device)
-        target_angle = sample_batched["y"][:, 1].to(device)
+        sample_batched_angle = sample_batched[0].view(-1, 1, input_size).to(device)
+        target_ClCd = sample_batched[1][:, 0].to(device)
+        target_angle = sample_batched[1][:, 1].to(device)
 
-        pred_ClCd, pred_angle = model(sample_batched["coordinates"].float())
+        pred_ClCd, pred_angle = model(sample_batched_angle.float())
         ClCd = torch.cat((target_ClCd, ClCd), 0)
         angle = torch.cat((target_angle, angle), 0)
         predicted_ClCd = torch.cat((pred_ClCd, predicted_ClCd), 0)
@@ -263,12 +269,6 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
         loss_angle = criterion_angle(pred_angle, target_angle)
         loss = loss_ClCd + loss_angle
         losses[sample_batched["aerofoil"][0]] = loss.item()
-
-        # with open(print_dir / "test_set_results.txt", 'a') as f:
-        #     for i, (pred_angle, pred_ClCd, y_angle, y_ClCd, aerofoil) in enumerate(zip(pred_angle, pred_ClCd, target_angle, target_ClCd, sample_batched["aerofoil"])):
-        #         f.write(f"{i + 1}. {aerofoil}:\n"
-        #                 f"predicted angle = {pred_angle:.2f}, target angle = {y_angle:.2f}\n"
-        #                 f"predicted ClCd = {pred_ClCd:.2f}, target ClCd = {y_ClCd:.2f}\n\n")
 
     top_losses = metrics.top_losses(losses)
 
@@ -284,8 +284,8 @@ with open(print_dir / "test_set_results.txt", 'w') as f:  # not appending!
             f"overall R2 = {metrics.R2_score(predicted_angle, angle):.2f}\n\n"
             f"Top losses:\n")
 
-    for k, v in top_losses.items():
-        f.write(f". {k}: {v:.2f}\n")
+    for i, (k, v) in enumerate(top_losses.items()):
+        f.write(f"{i}. {k}: {v:.2f}\n")
 
 # Visualize feature maps
 if print_activations:

@@ -7,10 +7,11 @@ import matplotlib.pyplot as plt
 import sys
 import TitleSequence as Title
 from random import seed, random
+from tqdm import tqdm
 
 # parameters
 seed(42)
-train_valid_test_split = [0.7, 0.2, 0.1]  # percentage to split train, validation and test sets randomly
+train_valid_test_split = [0.77, 0.2, 0.03]  # percentage to split train, validation and test sets randomly
 root_dir = Path('data')
 in_files = root_dir / 'auto_downloaded_files'
 out_files = root_dir / 'out'
@@ -66,7 +67,7 @@ x_target_half = x_target[len(x_target) // 2:]  # x target is symmetrical top and
 
 # make all aerofoils same size
 
-for aerofoil in aerofoils:
+for aerofoil in tqdm(aerofoils):
     try:
         x_coord = []
         y_coord = []
