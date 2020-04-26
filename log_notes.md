@@ -7,3 +7,6 @@ and therefore do not provide any information to the learner (redundant).
 indirectly, since a larger mini-batch will tend to have a smaller variance (law-of-large-numbers) than a smaller
 mini-batch. You want the mini-batch to be large enough to be informative about the direction of the gradient, but small
 enough that SGD can regularize your network.
+
+
+- I don't think I need to do a batchnorm after every convolution because the coordinates are already normalised by chord

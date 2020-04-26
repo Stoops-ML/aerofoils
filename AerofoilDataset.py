@@ -16,6 +16,12 @@ class AerofoilDataset(Dataset):
         self.transform = transform
         self.x = [[] for _ in range(len(self.aerofoils))]  # input: coordinates of aerofoil
         self.y = [[] for _ in range(len(self.aerofoils))]  # outputs: max ClCd at angle (2 outputs)
+        self.aerofoil = [None for _ in range(len(self.aerofoils))]
+
+        # TODO automate this
+        self.num_channels = 1
+        self.input_size = 199
+        self.output_size = 2
 
     def __getitem__(self, item):
         """index into dataset"""
@@ -30,24 +36,27 @@ class AerofoilDataset(Dataset):
         coords = np.loadtxt(self.root_dir / self.aerofoils[item], delimiter=" ", dtype=np.float32, skiprows=1)
         self.x[item] = np.array(coords[:, 1], dtype=np.float32)  # input
         self.y[item] = np.array([max_ClCd, angle], dtype=np.float32)  # output
+        self.aerofoil[item] = self.aerofoils[item]
 
+        # TODO make tensor transforms happen without user request
         if self.transform:
             self.x[item] = self.transform(self.x[item])
             self.y[item] = self.transform(self.y[item])
 
-        return self.x[item], self.y[item]  # return must be in this form for dataloader to be an iterator (therefore can't be a dictionary)
+        # return must be in this form for dataloader to be an iterator (therefore can't be a dictionary)
+        return self.x[item].view(self.num_channels, self.input_size), self.y[item], self.aerofoil[item]
 
     def __len__(self):
         """get length of dataset"""
         return len(self.aerofoils)
 
     def get_sizes(self):
-        num_channels = len(self.__getitem__(0)[0].shape)
+        num_channels = self.num_channels
         if num_channels == 1:  # 1 channel
-            input_size = len(self.__getitem__(0)[0])
+            input_size = self.input_size
         else:  # several channels
             _, input_size = self.__getitem__(0)[0].shape
-        output_size = len(self.__getitem__(0)[1])
+        output_size = self.output_size
 
         return num_channels, input_size, output_size
 

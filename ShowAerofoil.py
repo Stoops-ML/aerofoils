@@ -2,15 +2,15 @@ import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 
 
-def show_aerofoil(writer, tensorboard=False, **kwargs):
+def show_aerofoil(writer, tensorboard=False, *kwargs):
     """show plot of aerofoil"""
     fig_aero = plt.figure()
-    plt.plot(kwargs["coordinates"], 'r-')
-    ClCd, angle = kwargs["y"]
-    plt.title(f"{kwargs['aerofoil']}\n"
+    plt.plot(kwargs[0], 'r-')
+    ClCd, angle = kwargs[1]
+    plt.title(f"{kwargs[2]}\n"
               f"Max ClCd = {ClCd:.2f} at {angle:.2f} degrees")
     if tensorboard:
-        writer.add_figure(kwargs["aerofoil"], fig_aero)
+        writer.add_figure(kwargs[2], fig_aero)
         writer.close()
     else:
         plt.show()
