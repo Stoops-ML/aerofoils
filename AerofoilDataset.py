@@ -34,8 +34,8 @@ class AerofoilDataset(Dataset):
             max_ClCd, angle = y_vals[0], y_vals[1]
 
         coords = np.loadtxt(self.root_dir / self.aerofoils[item], delimiter=" ", dtype=np.float32, skiprows=1)
-        self.x[item] = np.array(coords[:, 1], dtype=np.float32)  # input
-        self.y[item] = np.array([max_ClCd, angle], dtype=np.float32)  # output
+        self.x[item] = np.array(coords[:, 1], dtype=np.float32)  # inputs
+        self.y[item] = np.array([max_ClCd, angle], dtype=np.float32)  # outputs
         self.aerofoil[item] = self.aerofoils[item]
 
         # TODO make tensor transforms happen without user request

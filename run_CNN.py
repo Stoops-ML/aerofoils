@@ -21,7 +21,7 @@ from torch_lr_finder import LRFinder
 
 
 # output switches
-find_LR = False
+find_LR = True
 print_activations = False
 print_epoch = 100  # print output after n epochs (after doing all batches within epoch)
 
@@ -29,8 +29,8 @@ print_epoch = 100  # print output after n epochs (after doing all batches within
 hidden_layers = [300]
 convolutions = [6]  # , 16, 40, 120]
 num_epochs = 1
-bs = 5
-learning_rate = 2
+bs = 25
+learning_rate = 0.00001
 
 # file configuration
 time_of_run = datetime.datetime.now().strftime("D%d_%m_%Y_T%H_%M_%S")
@@ -86,7 +86,6 @@ class ConvNet(nn.Module):
         dilation = 1  # default of nn.Conv1d = 1
         padding = ((input_size - 1) * stride - input_size + kernel_size + (kernel_size - 1) * (dilation - 1)
                    ) // 2
-
         self.image_size = (input_size + 2 * padding - kernel_size - (kernel_size - 1) * (dilation - 1))\
                           // stride + 1  # image size according to padding (as padding might not actually be an int)
 
@@ -127,12 +126,11 @@ class ConvNet(nn.Module):
         return self.decoder(x)
 
 
+# model, loss and optimiser
 model = ConvNet().to(device)
-
-# loss and optimiser
 criterion = nn.SmoothL1Loss()
 optimiser = torch.optim.SGD(model.parameters(), lr=learning_rate)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', patience=5)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', patience=5, verbose=True)
 
 if find_LR:
     if learning_rate > 0.0001:
@@ -150,26 +148,26 @@ writer.close()
 
 # training loop
 model.train()  # needed?
-train_loss = 0.
-valid_loss = 0.
-for epoch in (range(num_epochs)):  # tqdm doesn't seem to work with nested loops with one progress bar
+running_train_loss = 0.
+running_valid_loss = 0.
+for epoch in range(num_epochs):  # tqdm doesn't work with nested loops
     for i, train_sample in enumerate(train_loader):
+        # data
         train_input = train_sample[0].to(device)  # coordinates of aerofoil(s)
         train_targets = train_sample[1].to(device)  # max ClCd at angle
 
         # forward pass
         train_predictions = model(train_input.float())
-        loss = criterion(train_predictions, train_targets)
+        train_loss = criterion(train_predictions, train_targets)
 
         # backward pass
         optimiser.zero_grad()
-        loss.backward()
+        train_loss.backward()
         optimiser.step()
-        # scheduler.step()  TODO add this
 
         if (epoch+1) % print_epoch == 0:  # at the 100th epoch:
             # calculate training loss
-            train_loss += loss.item() * len(train_sample)   # loss.item() returns average loss per sample in batch
+            running_train_loss += train_loss.item() * len(train_sample)   # loss.item() returns average loss per sample in batch
 
             # calculate validation loss
             if (i+1) % len(train_loader) == 0:  # after all batches of training set run:
@@ -183,22 +181,23 @@ for epoch in (range(num_epochs)):  # tqdm doesn't seem to work with nested loops
                         valid_predictions = model(valid_input.float())
 
                         # loss
-                        valid_loss += criterion(valid_predictions, valid_targets).item() * len(valid_sample)
+                        running_valid_loss += criterion(valid_predictions, valid_targets).item() * len(valid_sample)
 
                 # calculate (shifted) train & validation losses (after 1 epoch)
-                train_loss /= len(train_dataset) * 1  # average train loss (=train loss/sample)
-                valid_loss /= len(valid_dataset) * 1
+                running_train_loss /= len(train_dataset) * 1  # average train loss (=train loss/sample)
+                running_valid_loss /= len(valid_dataset) * 1
 
                 # print to TensorBoard
-                writer.add_scalar("training loss", train_loss, epoch)  # , epoch * len(train_dataset) + i
-                writer.add_scalar("validation loss", valid_loss, epoch)  # , epoch * len(train_dataset) + i
+                writer.add_scalar("training loss", running_train_loss, epoch)  # , epoch * len(train_dataset) + i
+                writer.add_scalar("validation loss", running_valid_loss, epoch)  # , epoch * len(train_dataset) + i
 
                 print(f"epoch {epoch+1}/{num_epochs}, batch {i+1}/{len(train_loader)}.\n"
-                      f"Training loss = {train_loss:.4f}, "
-                      f"Validation loss = {valid_loss:.4f}\n")
+                      f"Training loss = {running_train_loss:.4f}, "
+                      f"Validation loss = {running_valid_loss:.4f}\n")
 
-                train_loss = 0.
-                valid_loss = 0.
+                scheduler.step(running_valid_loss)
+                running_train_loss = 0.
+                running_valid_loss = 0.
 writer.close()
 torch.save(model.state_dict(), print_dir / "model.pkl")  # create pickle file
 
@@ -213,14 +212,16 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
     test_target_list = torch.tensor([])
     test_predictions_list = torch.tensor([])
     for test_batch in test_loader:
+        # data
         test_coords = test_batch[0].to(device)
         test_targets = test_batch[1].to(device)  # max ClCd at angle
 
+        # forward pass
         test_predictions = model(test_coords.float())
         test_target_list = torch.cat((test_targets, test_target_list), 0)
-        test_predictions_list = torch.cat((test_predictions[0], test_predictions_list), 0)
+        test_predictions_list = torch.cat((test_predictions, test_predictions_list), 0)
 
-        # losses
+        # loss
         test_loss = criterion(test_predictions, test_targets)
         running_test_loss += test_loss.item() * len(test_batch)
         losses[test_batch[2][0]] = test_loss.item()
@@ -229,15 +230,15 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
     top_losses = metrics.top_losses(losses)
 
     print("Test set results:\n"
-          f"Running test loss = {running_test_loss}\n"
-          f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, 0], test_target_list[:, 0]):.2f}, "
-          f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, 1], test_target_list[:, 1]):.2f}")
+          f"Running test loss = {running_test_loss:.2f}\n"
+          f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, :, 0], test_target_list[:, :, 0]):.2f}, "
+          f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, :, 1], test_target_list[:, :, 1]):.2f}")
 
 with open(print_dir / "test_set_results.txt", 'w') as f:
     f.write(f"Number of epochs = {num_epochs}\n"
             f"Running test loss = {running_test_loss}\n"
-            f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, 0], test_target_list[:, 0]):.2f}\n"
-            f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, 1], test_target_list[:, 1]):.2f}\n"
+            f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, :, 0], test_target_list[:, :, 0]):.2f}\n"
+            f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, :, 1], test_target_list[:, :, 1]):.2f}\n"
             f"\nTop losses:\n")
 
     for i, (k, v) in enumerate(top_losses.items()):
