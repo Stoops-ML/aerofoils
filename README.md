@@ -24,7 +24,7 @@ number of control points and their upper and lower bounds have been decided, tur
 aerofoils. Not all the augmented aerofoils will be valid, and a certain of amount of playing around with the parameters 
 is required.
 
-## Methodology
+## Capabilities
 - 2D aerofoil coordinate data with maximum lift-to-drag ratio at angle downloaded with the 
 [aerofoils downloader script](download_aerofoils.py)
 - aerofoil coordinates redistributed along the x axis (according to a sample x axis distribution) to ensure all inputs 
