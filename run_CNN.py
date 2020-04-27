@@ -62,9 +62,9 @@ torch.manual_seed(0)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # import datasets
-train_dataset = AD.AerofoilDataset(train_dir, transform=transforms.Compose([AD.ToTensor()]))
-valid_dataset = AD.AerofoilDataset(valid_dir, transform=transforms.Compose([AD.ToTensor()]))
-test_dataset = AD.AerofoilDataset(test_dir, transform=transforms.Compose([AD.ToTensor()]))
+train_dataset = AD.AerofoilDataset(train_dir, transform=transforms.Compose([]))
+valid_dataset = AD.AerofoilDataset(valid_dir, transform=transforms.Compose([]))
+test_dataset = AD.AerofoilDataset(test_dir, transform=transforms.Compose([]))
 num_channels, input_size, output_size = AD.AerofoilDataset.get_sizes(train_dataset)
 
 # dataloaders
