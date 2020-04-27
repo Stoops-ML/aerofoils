@@ -36,7 +36,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 hidden_layers = [300, 300, 300, 300, 300, 300, 300, 300]
 num_epochs = 400
 bs = 50
-learning_rate = 0.01  # TODO add learning rate finder
+learning_rate = 0.01
 
 # import dataset
 train_dataset = AD.AerofoilDataset(train_dir, transform=transforms.Compose([AD.ToTensor()]))
@@ -140,7 +140,6 @@ torch.save(model.state_dict(), print_dir / (time_of_run + ".pkl"))  # creates pi
 
 
 # test set
-# TODO add validation set to epoch to calculate...
 # loaded_model = NeuralNet(input_size, hidden_layers, output_size).to(device)  # same as trained model
 # loaded_model.load_state_dict(torch.load(FILE, map_location=device))  # load trained model
 # be careful of what device of map_location is. It changes if model trained on CPU or GPU and loading onto a CPU or GPU

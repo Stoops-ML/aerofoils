@@ -8,7 +8,7 @@ import sys
 
 
 class AerofoilDataset(Dataset):
-    def __init__(self, root_dir, transform=None):
+    def __init__(self, root_dir, num_channels, input_size, output_size, transform=None):
         """data loading"""
         self.root_dir = Path(root_dir)
         self.aerofoils = [file for file in os.listdir(root_dir)
@@ -18,9 +18,9 @@ class AerofoilDataset(Dataset):
         self.y = [[] for _ in range(len(self.aerofoils))]  # outputs: max ClCd at angle (2 outputs)
         self.aerofoil = [None for _ in range(len(self.aerofoils))]
 
-        self.num_channels = 1  # one channel for y coordinate (xy coordinates requires two channels)
-        self.output_size = 0
-        self.input_size = 0
+        self.num_channels = num_channels
+        self.output_size = output_size
+        self.input_size = input_size
 
     def __getitem__(self, item):
         """index into dataset"""
@@ -33,10 +33,8 @@ class AerofoilDataset(Dataset):
             max_ClCd, angle = y_vals[0], y_vals[1]
 
         coords = np.loadtxt(self.root_dir / self.aerofoils[item], delimiter=" ", dtype=np.float32, skiprows=1)
-        self.x[item] = torch.from_numpy(np.array(coords[:, 1], dtype=np.float32)
-                                        ).view(self.num_channels, self.input_size)  # inputs
-        self.y[item] = torch.from_numpy(np.array([max_ClCd, angle], dtype=np.float32)
-                                        ).view(1, self.output_size)  # outputs
+        self.x[item] = np.array(coords[:, 1], dtype=np.float32)  # inputs
+        self.y[item] = np.array([max_ClCd, angle], dtype=np.float32)  # outputs
         self.aerofoil[item] = self.aerofoils[item]
 
         if self.transform:
@@ -44,22 +42,13 @@ class AerofoilDataset(Dataset):
             self.y[item] = self.transform(self.y[item])
 
         # return must be in this form for dataloader to be an iterator (therefore can't be a dictionary)
-        return self.x[item], self.y[item], self.aerofoil[item]
+        return self.x[item].view(self.num_channels, self.input_size), \
+               self.y[item].view(1, self.output_size),\
+               self.aerofoil[item]
 
     def __len__(self):
         """get length of dataset"""
         return len(self.aerofoils)
-
-    def get_sizes(self):
-        coords = np.loadtxt(self.root_dir / self.aerofoils[0], delimiter=" ", dtype=np.float32, skiprows=1)
-        self.input_size = len(coords)
-
-        with open(self.root_dir / self.aerofoils[0]) as f:
-            line = f.readline()
-            y_vals = [float(num) for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']
-            self.output_size = len(y_vals)
-
-        return self.num_channels, self.input_size, self.output_size
 
 
 class ToTensor(object):

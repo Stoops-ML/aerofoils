@@ -1,13 +1,12 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from torchvision import transforms
-import torchvision
 import matplotlib.pyplot as plt
 import os
-import numpy as np
 from pathlib import Path
 import re
+import numpy as np
 import datetime
 import ErrorMetrics as metrics
 import ShowAerofoil as show
@@ -21,16 +20,16 @@ from torch_lr_finder import LRFinder
 
 
 # output switches
-find_LR = True
+find_LR = False
 print_activations = False
-print_epoch = 100  # print output after n epochs (after doing all batches within epoch)
+print_epoch = 1  # print output after n epochs (after doing all batches within epoch)
 
 # hyper parameters
 hidden_layers = [300]
 convolutions = [6]  # , 16, 40, 120]
-num_epochs = 1
+num_epochs = 2
 bs = 25
-learning_rate = 0.00001
+learning_rate = 2
 
 # file configuration
 time_of_run = datetime.datetime.now().strftime("D%d_%m_%Y_T%H_%M_%S")
@@ -53,6 +52,16 @@ with open(print_dir / "log.txt", 'w') as f:
     f.write(f"Number of convolutions = {len(convolutions)}\n")
     f.write(f"Convolutions = {convolutions}\n")
 
+# get input size, output size and number of channels
+file = os.listdir(train_dir)[0] if '.csv' in os.listdir(train_dir)[0] else os.listdir(train_dir)[1]  # sample file
+coords = np.loadtxt(train_dir / file, delimiter=" ", dtype=np.float32, skiprows=1)  # xy coordinates of sample
+input_size = len(coords)
+with open(train_dir / file) as f:
+    line = f.readline()
+    y_vals = [float(num) for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']  # outputs of sample
+    output_size = len(y_vals)
+num_channels = 1  # one channel for y coordinate (xy coordinates requires two channels)
+
 # title sequence
 Title.print_title([" ", "Convolutional neural network", "Outputs: Max ClCd @ angle",
                    "TensorBoardX running", f"Output directory: {'print/' + time_of_run}"])
@@ -62,10 +71,12 @@ torch.manual_seed(0)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # import datasets
-train_dataset = AD.AerofoilDataset(train_dir, transform=transforms.Compose([]))
-valid_dataset = AD.AerofoilDataset(valid_dir, transform=transforms.Compose([]))
-test_dataset = AD.AerofoilDataset(test_dir, transform=transforms.Compose([]))
-num_channels, input_size, output_size = AD.AerofoilDataset.get_sizes(train_dataset)
+train_dataset = AD.AerofoilDataset(train_dir, num_channels, input_size, output_size,
+                                   transform=transforms.Compose([AD.ToTensor()]))
+valid_dataset = AD.AerofoilDataset(valid_dir, num_channels, input_size, output_size,
+                                   transform=transforms.Compose([AD.ToTensor()]))
+test_dataset = AD.AerofoilDataset(test_dir, num_channels, input_size, output_size,
+                                  transform=transforms.Compose([AD.ToTensor()]))
 
 # dataloaders
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)
@@ -150,7 +161,7 @@ writer.close()
 model.train()  # needed?
 running_train_loss = 0.
 running_valid_loss = 0.
-for epoch in range(num_epochs):  # tqdm doesn't work with nested loops
+for epoch in range(num_epochs):
     for i, train_sample in enumerate(train_loader):
         # data
         train_input = train_sample[0].to(device)  # coordinates of aerofoil(s)
