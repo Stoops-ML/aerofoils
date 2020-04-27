@@ -1,5 +1,3 @@
-[LR_finder]: LR_finder.png
-
 ## Aerofoils learner
 Convolutional neural network to learn the maximum lift-to-drag ratio at angle for 2D aerofoils. 
 
@@ -22,7 +20,8 @@ the current CNN is trained on only 1550 examples.
 around with the number of control points for thickness and camber and their size with `print_plots = True`. Once the 
 number of control points and their lower bound has been decided, turn `print_plots = False` to create new 
 aerofoils. Not all the augmented aerofoils will be valid, and a certain of amount of playing around with the parameters 
-is required.
+is required
+- make print activations method in [run_CNN script](run_CNN.py) more robust
 
 ## Capabilities
 - 2D aerofoil coordinate data with maximum lift-to-drag ratio at angle downloaded with the 
@@ -35,4 +34,4 @@ aerofoils have the same x distribution. Therefore, the CNN only takes input from
 modify the thickness and camber of pre-existing aerofoils using random values. The output files are in the same format 
 as the files from the [aerofoil redistribution script](aerofoil_redistribution.py)
 - learning rate finder plot available in [run_CNN script](run_CNN.py) by toggling `find_LR = True`
-- Convolutional neural network found in [run_CNN](run_CNN.py). Allow learning by toggling `find_LR = False`
+- Convolutional neural network found in [run_CNN script](run_CNN.py). Allow learning by toggling `find_LR = False`
