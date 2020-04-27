@@ -22,12 +22,12 @@ from torch_lr_finder import LRFinder
 # output switches
 find_LR = False
 print_activations = False
-print_epoch = 1  # print output after n epochs (after doing all batches within epoch)
+print_epoch = 25  # print output after n epochs (after doing all batches within epoch)
 
 # hyper parameters
 hidden_layers = [300]
 convolutions = [6]  # , 16, 40, 120]
-num_epochs = 2
+num_epochs = 100
 bs = 25
 learning_rate = 2
 
