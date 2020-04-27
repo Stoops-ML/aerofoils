@@ -31,8 +31,7 @@ Title.print_title([" ", "Chosen aerofoil dictates x coordinates of all other aer
 
 # make and read files & folders
 aerofoils = [file for file in os.listdir(in_files)
-             if re.search(r"(.csv)$", file)
-             if os.path.isfile(in_files / file)]
+             if re.search(r"(.csv)$", file)]
 
 # get x coordinates of chosen file
 x_target = []
