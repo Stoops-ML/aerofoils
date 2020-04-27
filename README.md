@@ -26,4 +26,5 @@ the current CNN is trained on only 1550 examples.
 - aerofoil coordinates redistributed along the x axis (according to a sample x axis distribution) to ensure all inputs 
 to the CNN have the same size. Moreover, this allows for a reduction in the number of channels (from two to one) as all 
 aerofoils have the same x distribution. Therefore, the CNN only takes input from the y coordinates of the aerofoil.
-- learning rate finder plot: ![alt text][LR_finder]
+- learning rate finder plot:
+![alt text][LR_finder]
