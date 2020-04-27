@@ -12,6 +12,7 @@ the current CNN is trained on only 1550 examples.
 ### To Do
 - write the decoder (transpose of convolutions)
 - [ShowAerofoil.py](ShowAerofoil.py) needs to be updated for TensorBoard
+- make print activations method in [run_CNN script](run_CNN.py) more robust
 
 ### Notes
 - neural network depreciated. Current work is being completed on the convolutional neural network only
@@ -21,7 +22,6 @@ around with the number of control points for thickness and camber and their size
 number of control points and their lower bound has been decided, turn `print_plots = False` to create new 
 aerofoils. Not all the augmented aerofoils will be valid, and a certain of amount of playing around with the parameters 
 is required
-- make print activations method in [run_CNN script](run_CNN.py) more robust
 
 ## Capabilities
 - 2D aerofoil coordinate data with maximum lift-to-drag ratio at angle downloaded with the 
