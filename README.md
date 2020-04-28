@@ -10,7 +10,6 @@ aerodynamic data for augmented aerofoils. Note that [Airfoil Tools](airfoiltools
 the current CNN is trained on only 1550 examples.
 
 ### To Do
-- write the decoder (transpose of convolutions)
 - [ShowAerofoil.py](ShowAerofoil.py) needs to be updated for TensorBoard
 - make print activations method in [run_CNN script](run_CNN.py) more robust
 
