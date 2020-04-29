@@ -48,6 +48,11 @@ if not torch.cuda.is_available():
     TB_process = subprocess.Popen(["tensorboard", f"--logdir={path / 'print'}"], stdout=open(os.devnull, 'w'),
                                   stderr=subprocess.STDOUT)  # {print_dir} to show just this run
 
+# title sequence
+tensorboard_str = "TensorBoard running" if not torch.cuda.is_available() else "Tensorboard NOT running"
+Title.print_title([" ", "Convolutional neural network", "Outputs: Max ClCd @ angle",
+                   tensorboard_str, f"Output directory: {'print/' + time_of_run}"])
+
 # write log file of architecture and for note taking
 with open(print_dir / "log.txt", 'w') as f:
     f.write(re.sub(r'_', '/', time_of_run) + "\n")
@@ -68,10 +73,6 @@ with open(train_dir / file) as f:
     output_size = len(y_vals)
 num_channels = 1  # one channel for y coordinate (xy coordinates requires two channels)
 
-# title sequence
-Title.print_title([" ", "Convolutional neural network", "Outputs: Max ClCd @ angle",
-                   "TensorBoardX running", f"Output directory: {'print/' + time_of_run}"])
-
 # import datasets
 train_dataset = AD.AerofoilDataset(train_dir, num_channels, input_size, output_size,
                                    transform=transforms.Compose([AD.ToTensor()]))
@@ -82,7 +83,7 @@ test_dataset = AD.AerofoilDataset(test_dir, num_channels, input_size, output_siz
 
 # dataloaders
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)
-valid_loader = DataLoader(dataset=valid_dataset, batch_size=bs, shuffle=True, num_workers=4)
+valid_loader = DataLoader(dataset=valid_dataset, batch_size=bs, shuffle=False, num_workers=4)
 test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=4)  # bs = 1 for top_losses()
 
 # show aerofoils
@@ -122,48 +123,52 @@ class ConvNet(nn.Module):
         out = out.view(-1, num_channels, self.image_size * convolutions[-1])  # -1 for varying batch sizes
         out = self.fully_connected(out)
 
-        return out  # you don't want to return a tuple, you must return a tensor
+        ClCd = out[:, :, 0]
+        angle = out[:, :, 1]
 
-    def decode(self, x):
-        return self.decoder(x)
+        return ClCd, angle  # must return a tensor
 
 
 # model, loss and optimiser
 model = ConvNet().to(device)
 criterion = nn.SmoothL1Loss()
 optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', patience=3, verbose=True)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', patience=5, verbose=True)
 
 if find_LR and not torch.cuda.is_available():
+    warnings.warn("Learning rate find does NOT work! It only works when a tensor is returned from the forward method, "
+                  "not a tuple.")
     if learning_rate > 0.0001:
-        warnings.warn(f"Selected initial learning rate too high.\nLearning rate changed to 0.0001")
+        print(f"Selected initial learning rate too high.\nLearning rate changed to 0.0001")
         optimiser = torch.optim.Adam(model.parameters(), lr=0.0001)
     lr_finder = LRFinder(model, optimiser, criterion, device=device)
-    lr_finder.range_test(train_loader, end_lr=500, num_iter=200)
+    lr_finder.range_test(train_loader, end_lr=200, num_iter=200)
     lr_finder.plot()  # to inspect the loss-learning rate graph
     lr_finder.reset()  # to reset the model and optimizer to their initial state
     subprocess.Popen(["kill", "-9", f"{TB_process.pid}"])
     sys.exit("Learning rate plot finished")
 
 # structure of model
-if not torch.cuda.is_available():
-    for sample in train_loader:
-        writer.add_graph(model, sample[0].float())
-    writer.close()
+# if not torch.cuda.is_available():
+#     for sample in train_loader:
+#         writer.add_graph(model, sample[0].float())
+#     writer.close()
 
 # training loop
 model.train()  # needed?
 running_train_loss = 0.
 running_valid_loss = 0.
 for epoch in range(num_epochs):
-    for i, train_sample in enumerate(train_loader):
+    for i, (train_input, train_targets, _) in enumerate(train_loader):
         # data
-        train_input = train_sample[0].to(device)  # coordinates of aerofoil(s)
-        train_targets = train_sample[1].to(device)  # max ClCd at angle
+        train_input = train_input.to(device)  # coordinates of aerofoil(s)
+        train_ClCd_target = train_targets[:, :, 0].to(device)  # max ClCd at angle
+        train_angle_target = train_targets[:, :, 1].to(device)  # angle of max ClCd
 
         # forward pass
-        train_predictions = model(train_input.float())
-        train_loss = criterion(train_predictions, train_targets)
+        train_ClCd_prediction, train_angle_prediction = model(train_input.float())
+        train_loss = criterion(train_ClCd_prediction, train_ClCd_target) + criterion(train_angle_prediction,
+                                                                                     train_angle_target)
 
         # backward pass
         optimiser.zero_grad()
@@ -172,21 +177,24 @@ for epoch in range(num_epochs):
 
         if (epoch+1) % print_epoch == 0 or epoch == 0:  # at the 100th epoch:
             # calculate training loss
-            running_train_loss += train_loss.item() * len(train_sample)   # loss.item() returns average loss per sample in batch
+            running_train_loss += train_loss.item() * train_input.shape[0]   # loss.item() returns average loss per sample in batch
 
             # calculate validation loss
             if (i+1) % len(train_loader) == 0:  # after all batches of training set run:
                 with torch.no_grad():  # don't add gradients to computational graph
-                    for valid_sample in valid_loader:
+                    for valid_input, valid_targets, _ in valid_loader:
                         # data
-                        valid_input = valid_sample[0].to(device)  # y coordinates of aerofoil
-                        valid_targets = valid_sample[1].to(device)  # max ClCd at angle
+                        valid_input = valid_input.to(device)  # y coordinates of aerofoil
+                        valid_ClCd_target = valid_targets[:, :, 0].to(device)  # max ClCd
+                        valid_angle_target = valid_targets[:, :, 1].to(device)  # angle of max ClCd
 
                         # forward pass
-                        valid_predictions = model(valid_input.float())
+                        valid_ClCd_prediction, valid_angle_prediction = model(valid_input.float())
 
                         # loss
-                        running_valid_loss += criterion(valid_predictions, valid_targets).item() * len(valid_sample)
+                        running_valid_loss += (criterion(valid_ClCd_prediction, valid_ClCd_target).item() +
+                                               criterion(valid_angle_prediction, valid_angle_target).item()
+                                               ) * valid_input.shape[0]
 
                 # calculate (shifted) train & validation losses (after 1 epoch)
                 running_train_loss /= len(train_dataset) * 1  # average train loss (=train loss/sample)
@@ -218,34 +226,40 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
     running_test_loss = 0.
     test_target_list = torch.tensor([]).to(device)
     test_predictions_list = torch.tensor([]).to(device)
-    for test_batch in test_loader:
+    for test_input, test_targets, aerofoils in test_loader:
         # data
-        test_coords = test_batch[0].to(device)
-        test_targets = test_batch[1].to(device)  # max ClCd at angle
+        test_coords = test_input.to(device)
+        test_ClCd_target = test_targets[:, :, 0].to(device)  # max ClCd
+        test_angle_target = test_targets[:, :, 1].to(device)  # angle of max ClCd
 
         # forward pass
-        test_predictions = model(test_coords.float())
-        test_target_list = torch.cat((test_targets, test_target_list), 0)
-        test_predictions_list = torch.cat((test_predictions, test_predictions_list), 0)
+        test_ClCd_prediction, test_angle_prediction = model(test_coords.float())
+
+        # store values
+        test_target_list = torch.cat((torch.cat((test_ClCd_target, test_angle_target), 1),
+                                      test_target_list), 0)
+        test_predictions_list = torch.cat((torch.cat((test_ClCd_prediction, test_angle_prediction), 1),
+                                           test_predictions_list), 0)
 
         # loss
-        test_loss = criterion(test_predictions, test_targets)
-        running_test_loss += test_loss.item() * len(test_batch)
-        losses[test_batch[2][0]] = test_loss.item()
+        test_loss = criterion(test_ClCd_prediction, test_ClCd_target) + criterion(test_angle_prediction,
+                                                                                  test_angle_target)
+        running_test_loss += test_loss.item() * test_input.shape[0]
+        losses[aerofoils[0]] = test_loss.item()
 
     running_test_loss /= len(test_dataset) * 1  # average train loss (=train loss/sample)
     top_losses = metrics.top_losses(losses)
 
     print("Test set results:\n"
           f"Running test loss = {running_test_loss:.2f}\n"
-          f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, :, 0], test_target_list[:, :, 0]):.2f}, "
-          f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, :, 1], test_target_list[:, :, 1]):.2f}")
+          f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, 0], test_target_list[:, 0]):.2f}, "
+          f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, 1], test_target_list[:, 1]):.2f}")
 
 with open(print_dir / "test_set_results.txt", 'w') as f:
     f.write(f"Number of epochs = {num_epochs}\n"
             f"Running test loss = {running_test_loss}\n"
-            f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, :, 0], test_target_list[:, :, 0]):.2f}\n"
-            f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, :, 1], test_target_list[:, :, 1]):.2f}\n"
+            f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, 0], test_target_list[:, 0]):.2f}\n"
+            f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, 1], test_target_list[:, 1]):.2f}\n"
             f"\nTop losses:\n")
 
     for i, (k, v) in enumerate(top_losses.items()):

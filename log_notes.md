@@ -27,4 +27,7 @@ units in first layer. Adding a third convolutional layer doesn't reduce training
 channels in convolutional layers improves loss slightly (but really not much). Using few sample in batch to generalise 
 better - it's not very computationally expensive.
 
+I've split up the outputs from the forward method, now neural network works a lot better: improvement of 400%. This 
+explaines why the LR finder was so bad. However, now the forward method outputs a tuple and not a tensor the LR finder 
+does not work. I've spoken to the developers and they're looking into allowing it to work with a tuple.
  
