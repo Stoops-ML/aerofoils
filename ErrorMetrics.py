@@ -1,5 +1,7 @@
 import torch
 import torch.nn.functional as F
+import torch.nn as nn
+import sys
 
 
 def flatten_check(out, targ):
@@ -25,3 +27,27 @@ def R2_score(pred, targ):
 
 def top_losses(kwargs):
     return {k: v for k, v in sorted(kwargs.items(), key=lambda item: item[1], reverse=True)}
+
+
+class MyLossFunc(nn.Module):
+    def __init__(self):
+        """loss function wrapper (instead of simply adding losses in for loop of epoch). The loss function is
+        written this way so both the LRFinder() and the training loop can evaluate the losses in the same manner.
+        This allows both methods to work in the same script."""
+        super(MyLossFunc, self).__init__()
+        self.loss_func1 = nn.SmoothL1Loss()
+        self.loss_func2 = nn.SmoothL1Loss()
+
+    def forward(self, *predictions_targets, **kwargs):  # matches forward of FindLR() (necessary)
+        # predictions
+        ClCd_prediction = predictions_targets[0][0]  # max ClCd at angle
+        angle_prediction = predictions_targets[0][1]  # angle of max ClCd
+
+        # targets
+        ClCd_target = predictions_targets[1][:, :, 0]
+        angle_target = predictions_targets[1][:, :, 1]
+
+        # losses
+        loss1 = self.loss_func1(ClCd_prediction, ClCd_target)
+        loss2 = self.loss_func2(angle_prediction, angle_target)
+        return loss1 + loss2

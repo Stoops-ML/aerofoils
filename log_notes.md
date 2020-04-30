@@ -30,4 +30,9 @@ better - it's not very computationally expensive.
 I've split up the outputs from the forward method, now neural network works a lot better: improvement of 400%. This 
 explaines why the LR finder was so bad. However, now the forward method outputs a tuple and not a tensor the LR finder 
 does not work. I've spoken to the developers and they're looking into allowing it to work with a tuple.
+
+LR finder now fixed: I've created my own wrapper for multiple loss functions (see https://github.com/davidtvs/pytorch-lr-finder/issues/35)
+
+test set probably has a lower loss than training and validation losses because dropout is deactivated. This means that
+all the weights/activations are used in the model, not just some of them (as determined by the probability in dropout). 
  

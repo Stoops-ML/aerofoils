@@ -24,14 +24,14 @@ torch.manual_seed(0)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # output switches
-find_LR = False  # I don't think LR is giving accurate results. A suggested LR of 1 doesn't at all work for this model
+find_LR = False
 print_activations = False
 print_epoch = 1  # print output after n epochs (after doing all batches within epoch)
 
 # hyper parameters
 hidden_layers = [300]
 convolutions = [6, 16]
-num_epochs = 35
+num_epochs = 1
 bs = 5
 learning_rate = 0.01
 
@@ -75,16 +75,16 @@ num_channels = 1  # one channel for y coordinate (xy coordinates requires two ch
 
 # import datasets
 train_dataset = AD.AerofoilDataset(train_dir, num_channels, input_size, output_size,
-                                   transform=transforms.Compose([AD.ToTensor()]))
+                                   transform=transforms.Compose([]))
 valid_dataset = AD.AerofoilDataset(valid_dir, num_channels, input_size, output_size,
-                                   transform=transforms.Compose([AD.ToTensor()]))
+                                   transform=transforms.Compose([]))
 test_dataset = AD.AerofoilDataset(test_dir, num_channels, input_size, output_size,
-                                  transform=transforms.Compose([AD.ToTensor()]))
+                                  transform=transforms.Compose([]))
 
 # dataloaders
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)
 valid_loader = DataLoader(dataset=valid_dataset, batch_size=bs, shuffle=False, num_workers=4)
-test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=4)  # bs = 1 for top_losses()
+test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=4)
 
 # show aerofoils
 # if not torch.cuda.is_available():
@@ -131,13 +131,11 @@ class ConvNet(nn.Module):
 
 # model, loss and optimiser
 model = ConvNet().to(device)
-criterion = nn.SmoothL1Loss()
+criterion = metrics.MyLossFunc()
 optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', patience=5, verbose=True)
 
 if find_LR and not torch.cuda.is_available():
-    warnings.warn("Learning rate find does NOT work! It only works when a tensor is returned from the forward method, "
-                  "not a tuple.")
     if learning_rate > 0.0001:
         print(f"Selected initial learning rate too high.\nLearning rate changed to 0.0001")
         optimiser = torch.optim.Adam(model.parameters(), lr=0.0001)
@@ -155,20 +153,17 @@ if find_LR and not torch.cuda.is_available():
 #     writer.close()
 
 # training loop
-model.train()  # needed?
 running_train_loss = 0.
 running_valid_loss = 0.
 for epoch in range(num_epochs):
     for i, (train_input, train_targets, _) in enumerate(train_loader):
         # data
         train_input = train_input.to(device)  # coordinates of aerofoil(s)
-        train_ClCd_target = train_targets[:, :, 0].to(device)  # max ClCd at angle
-        train_angle_target = train_targets[:, :, 1].to(device)  # angle of max ClCd
+        train_targets = train_targets.to(device)  # max ClCd at angle
 
         # forward pass
-        train_ClCd_prediction, train_angle_prediction = model(train_input.float())
-        train_loss = criterion(train_ClCd_prediction, train_ClCd_target) + criterion(train_angle_prediction,
-                                                                                     train_angle_target)
+        train_predictions = model(train_input.float())
+        train_loss = criterion(train_predictions, train_targets)  # matches LRFinder()
 
         # backward pass
         optimiser.zero_grad()
@@ -185,16 +180,11 @@ for epoch in range(num_epochs):
                     for valid_input, valid_targets, _ in valid_loader:
                         # data
                         valid_input = valid_input.to(device)  # y coordinates of aerofoil
-                        valid_ClCd_target = valid_targets[:, :, 0].to(device)  # max ClCd
-                        valid_angle_target = valid_targets[:, :, 1].to(device)  # angle of max ClCd
+                        valid_targets = valid_targets.to(device)  # max ClCd at angle
 
                         # forward pass
-                        valid_ClCd_prediction, valid_angle_prediction = model(valid_input.float())
-
-                        # loss
-                        running_valid_loss += (criterion(valid_ClCd_prediction, valid_ClCd_target).item() +
-                                               criterion(valid_angle_prediction, valid_angle_target).item()
-                                               ) * valid_input.shape[0]
+                        valid_predictions = model(valid_input.float())
+                        running_valid_loss += criterion(valid_predictions, valid_targets).item() * valid_input.shape[0]
 
                 # calculate (shifted) train & validation losses (after 1 epoch)
                 running_train_loss /= len(train_dataset) * 1  # average train loss (=train loss/sample)
@@ -224,26 +214,23 @@ model.eval()  # turn off batch normalisation and dropout
 with torch.no_grad():  # don't add gradients of test set to computational graph
     losses = {}
     running_test_loss = 0.
-    test_target_list = torch.tensor([]).to(device)
+    test_targets_list = torch.tensor([]).to(device)
     test_predictions_list = torch.tensor([]).to(device)
     for test_input, test_targets, aerofoils in test_loader:
         # data
         test_coords = test_input.to(device)
-        test_ClCd_target = test_targets[:, :, 0].to(device)  # max ClCd
-        test_angle_target = test_targets[:, :, 1].to(device)  # angle of max ClCd
+        test_targets = test_targets.to(device)  # max ClCd at angle
 
         # forward pass
-        test_ClCd_prediction, test_angle_prediction = model(test_coords.float())
+        test_predictions = model(test_coords.float())
 
         # store values
-        test_target_list = torch.cat((torch.cat((test_ClCd_target, test_angle_target), 1),
-                                      test_target_list), 0)
-        test_predictions_list = torch.cat((torch.cat((test_ClCd_prediction, test_angle_prediction), 1),
-                                           test_predictions_list), 0)
+        test_targets_list = torch.cat((test_targets_list, test_targets), 0)
+        test_predictions_list = torch.cat((test_predictions_list,
+                                          torch.cat((test_predictions[0], test_predictions[1]), 1)), 0)
 
         # loss
-        test_loss = criterion(test_ClCd_prediction, test_ClCd_target) + criterion(test_angle_prediction,
-                                                                                  test_angle_target)
+        test_loss = criterion(test_predictions, test_targets)  # matches LRFinder()
         running_test_loss += test_loss.item() * test_input.shape[0]
         losses[aerofoils[0]] = test_loss.item()
 
@@ -252,14 +239,14 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
 
     print("Test set results:\n"
           f"Running test loss = {running_test_loss:.2f}\n"
-          f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, 0], test_target_list[:, 0]):.2f}, "
-          f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, 1], test_target_list[:, 1]):.2f}")
+          f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, 0], test_targets_list[:, :, 0]):.2f}, "
+          f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, 1], test_targets_list[:, :, 1]):.2f}")
 
 with open(print_dir / "test_set_results.txt", 'w') as f:
     f.write(f"Number of epochs = {num_epochs}\n"
-            f"Running test loss = {running_test_loss}\n"
-            f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, 0], test_target_list[:, 0]):.2f}\n"
-            f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, 1], test_target_list[:, 1]):.2f}\n"
+            f"Running test loss = {running_test_loss:.4f}\n"
+            f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, 0], test_targets_list[:, :, 0]):.2f}\n"
+            f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, 1], test_targets_list[:, :, 1]):.2f}\n"
             f"\nTop losses:\n")
 
     for i, (k, v) in enumerate(top_losses.items()):

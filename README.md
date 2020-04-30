@@ -45,6 +45,7 @@ Note that [Airfoil Tools](airfoiltools.com) provide aerodynamic data from
 ### To Do
 - [ShowAerofoil.py](ShowAerofoil.py) needs to be updated for TensorBoard
 - make print activations method in [run_CNN script](run_CNN.py) more robust
+- look into aerofoil transformsations. Currently there is on a flip horizontal transformation (not yet implemented)
 
 ### Notes
 - [run_NN.py](run_NN.py) depreciated. Current work is being completed on the convolutional neural network only
@@ -53,6 +54,3 @@ around with the number of control points for thickness and camber and their size
 number of control points and their lower bound has been decided, turn `print_plots = False` to create new 
 aerofoils. Not all the augmented aerofoils will be valid, and a certain of amount of playing around with the parameters 
 is required
-- learning rate finder only works when a tensor is returned from the forward method, not a tuple (in this project, a 
-tuple of lift-to-drag ratio and angle is returned). The developers are looking into 
-[adding this functionality](https://github.com/davidtvs/pytorch-lr-finder/issues/35).
