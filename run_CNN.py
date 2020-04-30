@@ -230,7 +230,7 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
         # Need a 2D tensor: one for ClCd and one for angle.
         test_targets_list = torch.cat((test_targets_list, test_targets[0]), 0)
         test_predictions_list = torch.cat((test_predictions_list,
-                                           torch.tensor(test_predictions).view(1, output_size)), 0)
+                                           torch.tensor(test_predictions).view(1, output_size).to(device)), 0)
 
         # loss
         test_loss = criterion(test_predictions, test_targets)  # matches LRFinder()
