@@ -24,14 +24,14 @@ torch.manual_seed(0)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # output switches
-find_LR = False
+find_LR = True
 print_activations = False
 print_epoch = 1  # print output after n epochs (after doing all batches within epoch)
 
 # hyper parameters
 hidden_layers = [300]
 convolutions = [6, 16]
-num_epochs = 1
+num_epochs = 35
 bs = 5
 learning_rate = 0.01
 
@@ -225,9 +225,13 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
         test_predictions = model(test_coords.float())
 
         # store values
-        test_targets_list = torch.cat((test_targets_list, test_targets), 0)
+        test_targets_list = torch.cat((test_targets_list, test_targets[0, 0]), 0)
         test_predictions_list = torch.cat((test_predictions_list,
-                                          torch.cat((test_predictions[0], test_predictions[1]), 1)), 0)
+                                          torch.cat((test_predictions[0][0], test_predictions[1][0]), 0)), 0)
+        # test_targets three dimensional here because you have a batch (1 dimension), and two more dimensions from
+        # the .view(1, self.output_size) on the self.y[item] variable in the dataset class AerofoilDataset.py.
+        # Therefore, test_targets[0, 0] gets one dimension out = a row out of the test_targets. This allows the above
+        # lists to be one dimensional.
 
         # loss
         test_loss = criterion(test_predictions, test_targets)  # matches LRFinder()
@@ -239,14 +243,14 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
 
     print("Test set results:\n"
           f"Running test loss = {running_test_loss:.2f}\n"
-          f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, 0], test_targets_list[:, :, 0]):.2f}, "
-          f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, 1], test_targets_list[:, :, 1]):.2f}")
+          f"ClCd RMS: {metrics.root_mean_square(test_predictions_list, test_targets_list):.2f}, "
+          f"angle RMS: {metrics.root_mean_square(test_predictions_list, test_targets_list):.2f}")
 
 with open(print_dir / "test_set_results.txt", 'w') as f:
     f.write(f"Number of epochs = {num_epochs}\n"
             f"Running test loss = {running_test_loss:.4f}\n"
-            f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, 0], test_targets_list[:, :, 0]):.2f}\n"
-            f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, 1], test_targets_list[:, :, 1]):.2f}\n"
+            f"ClCd RMS: {metrics.root_mean_square(test_predictions_list, test_targets_list):.2f}\n"
+            f"angle RMS: {metrics.root_mean_square(test_predictions_list, test_targets_list):.2f}\n"
             f"\nTop losses:\n")
 
     for i, (k, v) in enumerate(top_losses.items()):
