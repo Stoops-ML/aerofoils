@@ -2,7 +2,7 @@
 Convolutional neural network to learn the maximum lift-to-drag ratio at angle for 2D aerofoils.
 
 Maximum lift-to-drag ratio at angle is an important aerodynamic property of aircraft wings:
-![alt text](https://www.digopaul.com/wp-content/uploads/related_images/2015/09/10/aerofoil_2.jpg "Sample aerofoil")
+![alt text](https://cdn.comsol.com/wordpress/2015/06/Angle-of-attack-with-lift-and-drag.png "Sample aerofoil")
 
 An aerofoil is a 2D cross-section of a wing. Thus a 3D wing is essentially a combiation of 2D aerofoil sections:
 ![alt text](https://d2t1xqejof9utc.cloudfront.net/screenshots/pics/76ce7538aace713573297840a447c835/large.PNG "Sample wing")
