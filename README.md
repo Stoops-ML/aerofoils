@@ -47,7 +47,7 @@ Note that [Airfoil Tools](airfoiltools.com) provide aerodynamic data from
 - [ShowAerofoil.py](ShowAerofoil.py) needs to be updated for TensorBoard
 - make print activations method in [run_CNN script](run_CNN.py) more robust
 - look into aerofoil transformsations. Currently there is on a flip horizontal transformation (not yet implemented)
-- apply PCA on the activations from the convolutions. This will get the most important geometrical features of the aerofoil.
+- apply PCA on the activations from the convolutions. This will get the most important geometrical features of the aerofoil. From this, plot a graph of two (or three) features against each other for each aerofoil. This should cluster similar aerofoils together and might show interesting latent features.
 
 ### Notes
 - [run_NN.py](run_NN.py) depreciated. Current work is being completed on the convolutional neural network only
