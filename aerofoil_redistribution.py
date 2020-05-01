@@ -44,28 +44,7 @@ with open(in_files / chosen_aerofoil_x) as f:
             x_target.append(float(xy[0]))
 x_target_half = x_target[len(x_target) // 2:]  # x target is symmetrical top and bottom
 
-# mean of ClCd and angle
-# ClCd_list = []
-# angle_list = []
-# for aerofoil in aerofoils:
-#     with open(in_files / aerofoil) as f:
-#         for line in f:
-#             if 'ClCd' in line:
-#                 outputs = [num for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']
-#                 ClCd_list.append(float(outputs[0]))
-#                 angle_list.append(float(outputs[1]))
-#                 break
-# ClCd_mean = sum(ClCd_list) / len(aerofoils)
-# angle_mean = sum(angle_list) / len(aerofoils)
-
-# # standard deviation of ClCd and angle
-# ClCd_list_SD = [(ClCd - ClCd_mean)**2 for ClCd in ClCd_list]
-# angle_list_SD = [(angle - angle_mean)**2 for angle in angle_list]
-# ClCd_SD = np.sqrt(1/len(aerofoils) * sum(ClCd_list_SD))
-# angle_SD = np.sqrt(1/len(aerofoils) * sum(angle_list_SD))
-
 # make all aerofoils same size
-
 for aerofoil in tqdm(aerofoils):
     try:
         x_coord = []

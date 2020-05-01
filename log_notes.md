@@ -34,5 +34,9 @@ does not work. I've spoken to the developers and they're looking into allowing i
 LR finder now fixed: I've created my own wrapper for multiple loss functions (see https://github.com/davidtvs/pytorch-lr-finder/issues/35)
 
 test set probably has a lower loss than training and validation losses because dropout is deactivated. This means that
-all the weights/activations are used in the model, not just some of them (as determined by the probability in dropout). 
- 
+all the weights/activations are used in the model, not just some of them (as determined by the probability in dropout).
+
+y values are now normalised (x values already normalised by chord length) for train and validation sets, but not for 
+the test set. This means the test set root mean square value is the true RMS (because the test data isn't normalised).
+It's best to use [-1,1] min-max scaling or zero-mean, unit-variance standardization. Scaling your data into [0,1] will 
+result in slow learning (I SHOULD THEREFORE PROBABLY NORMALISE X VALUES). You must use the same normalisation scaling for train, valid and test sets.

@@ -25,7 +25,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # output switches
 find_LR = False
-print_activations = False
+print_activations = True
 print_epoch = 1  # print output after n epochs (after doing all batches within epoch)
 
 # hyper parameters
@@ -35,10 +35,11 @@ num_epochs = 1
 bs = 5
 learning_rate = 0.01
 
-# file configuration
+# paths and files
 time_of_run = datetime.datetime.now().strftime("D%d_%m_%Y_T%H_%M_%S")
 path = Path(__file__).parent
 train_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else 'data') / 'out' / 'train'
+train_aerofoils = [file for file in os.listdir(train_dir) if re.search(r"(.csv)$", file)]
 valid_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else 'data') / 'out' / 'valid'
 test_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else 'data') / 'out' / 'test'
 print_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else '') / 'print' / time_of_run
@@ -73,13 +74,13 @@ with open(train_dir / file) as f:
     output_size = len(y_vals)
 num_channels = 1  # one channel for y coordinate (xy coordinates requires two channels)
 
-# import datasets
+# import datasets. Use same scaling for train, valid and test sets
 train_dataset = AD.AerofoilDataset(train_dir, num_channels, input_size, output_size,
-                                   transform=transforms.Compose([]))
+                                   transform=transforms.Compose([AD.NormaliseYValues(train_aerofoils, train_dir)]))
 valid_dataset = AD.AerofoilDataset(valid_dir, num_channels, input_size, output_size,
-                                   transform=transforms.Compose([]))
+                                   transform=transforms.Compose([AD.NormaliseYValues(train_aerofoils, train_dir)]))
 test_dataset = AD.AerofoilDataset(test_dir, num_channels, input_size, output_size,
-                                  transform=transforms.Compose([]))
+                                  transform=transforms.Compose([AD.NormaliseYValues(train_aerofoils, train_dir)]))
 
 # dataloaders
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)
@@ -135,6 +136,7 @@ criterion = metrics.MyLossFunc()
 optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', patience=5, verbose=True)
 
+# find learning rate
 if find_LR and not torch.cuda.is_available():
     if learning_rate > 0.0001:
         print(f"Selected initial learning rate too high.\nLearning rate changed to 0.0001")
@@ -206,9 +208,6 @@ if not torch.cuda.is_available():
     writer.close()
 torch.save(model.state_dict(), print_dir / "model.pkl")  # create pickle file
 
-# result = model.decode(model((valid_dataset[0])["coordinates"]).view(-1, num_channels, input_size))
-# draw resulting image (in link)
-
 # test set
 model.eval()  # turn off batch normalisation and dropout
 with torch.no_grad():  # don't add gradients of test set to computational graph
@@ -241,7 +240,7 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
     top_losses = metrics.top_losses(losses)
 
     print("Test set results:\n"
-          f"Running test loss = {running_test_loss:.2f}\n"
+          f"Running test loss = {running_test_loss:.4f}\n"
           f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, 0], test_targets_list[:, 0]):.2f}, "
           f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, 1], test_targets_list[:, 1]):.2f}")
 
@@ -257,24 +256,32 @@ with open(print_dir / "test_set_results.txt", 'w') as f:
 
 # Visualize feature maps
 if print_activations:
+    # TODO: do PCA on activations so that you get the most important (geometrical) features (of an aerofoil)
+    #  out of the activations
     # TODO: add this to tensorboard
     activation = {}
+
     def get_activation(name):
         def hook(_, __, output):
             activation[name] = output.detach()
         return hook
 
     # model.conv2.register_forward_hook(get_activation('conv2'))
-    model.convolutions[6].register_forward_hook(get_activation('conv6'))
-    sample = (valid_dataset[0])["coordinates"]
-    output = model(sample.view(1, num_channels, input_size).float().to(device))
+    activation_str = 'Convolution1'
+    model.extractor[1].register_forward_hook(get_activation(activation_str))
 
-    act = activation['conv6'].squeeze()
+    # make loader an iterator and get activations
+    dataiter = iter(test_loader)  # using test_loader as it has a batchsize of 1
+    x, y, aerofoil = dataiter.next()
+    output = model(x.float().to(device))
+    act = activation[activation_str].squeeze()
+
+    # plot activations
     fig, axarr = plt.subplots(act.size(0))
-
     for idx in range(act.size(0)):
         axarr[idx].plot(act[idx])
-        plt.plot(act[idx])
+    fig.suptitle(f"Activations of {activation_str}\nAerofoil {aerofoil[0]}")
+    plt.show()
 
 # kill TensorBoard
 if not torch.cuda.is_available():
