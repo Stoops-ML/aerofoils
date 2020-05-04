@@ -17,20 +17,24 @@ import subprocess
 if not torch.cuda.is_available():
     import ShowAerofoil as show
     from torch_lr_finder import LRFinder
-    from torch.utils.tensorboard import SummaryWriter
+    import torch.utils.tensorboard as tf
 
-# device configuration
-torch.manual_seed(0)
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # output switches
 find_LR = False
-print_activations = True
-print_epoch = 1  # print output after n epochs (after doing all batches within epoch)
+print_activations = False
+print_heatmap = False
+print_comp_graph = False
+print_epoch = 1  # print output & plot losses after n epochs (after doing all batches within epoch)
+if torch.cuda.is_available():  # not available on cuda
+    find_LR = False
+    print_activations = False
+    print_heatmap = False
+    print_comp_graph = False
 
 # hyper parameters
 hidden_layers = [300]
-convolutions = [6, 16]
+convolutions = [6, 16, 32, 64]
 num_epochs = 1
 bs = 5
 learning_rate = 0.01
@@ -44,10 +48,16 @@ valid_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else 'data'
 test_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else 'data') / 'out' / 'test'
 print_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else '') / 'print' / time_of_run
 print_dir.mkdir()
+
+# TensorBoard writer
 if not torch.cuda.is_available():
-    writer = SummaryWriter(print_dir / 'TensorBoard_events')
+    writer = tf.SummaryWriter(print_dir / 'TensorBoard_events')
     TB_process = subprocess.Popen(["tensorboard", f"--logdir={path / 'print'}"], stdout=open(os.devnull, 'w'),
                                   stderr=subprocess.STDOUT)  # {print_dir} to show just this run
+
+# device configuration
+torch.manual_seed(0)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # title sequence
 tensorboard_str = "TensorBoard running" if not torch.cuda.is_available() else "Tensorboard NOT running"
@@ -85,7 +95,7 @@ test_dataset = AD.AerofoilDataset(test_dir, num_channels, input_size, output_siz
 # dataloaders
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)
 valid_loader = DataLoader(dataset=valid_dataset, batch_size=bs, shuffle=False, num_workers=4)
-test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=4)
+test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=4)  # bs=1 required for top_losses()
 
 # show aerofoils
 # if not torch.cuda.is_available():
@@ -97,24 +107,41 @@ test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_
 class ConvNet(nn.Module):
     def __init__(self):
         super(ConvNet, self).__init__()
-        kernel_size = 10
-        stride = 1  # no reduction in image size
-        # dilation = 1  # default of nn.Conv1d = 1
+        kernel_size = 3
+        stride = 1
+        padding = 0
 
-        self.image_size = input_size
-        padding = (kernel_size - 1) // stride  # true if stride=1. Produces output size = input size after filter
+        # input size change due to convolution and pooling
+        self.image_size = int(input_size)
+        for _ in range(len(convolutions) * 2):  # *2 for convolution AND pooling
+            self.image_size = int((self.image_size - kernel_size + 2. * padding) // stride + 1.)
 
         self.extractor = nn.Sequential(
             nn.Conv1d(num_channels, convolutions[0], kernel_size, padding=padding, padding_mode='reflect'),
-            nn.MaxPool1d(kernel_size, stride),
+            nn.BatchNorm1d(convolutions[0]),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size, stride, padding),
+
             nn.Conv1d(convolutions[0], convolutions[1], kernel_size, padding=padding, padding_mode='reflect'),
+            nn.BatchNorm1d(convolutions[1]),
+            nn.ReLU(),
             nn.MaxPool1d(kernel_size, stride),
+
+            nn.Conv1d(convolutions[1], convolutions[2], kernel_size, padding=padding, padding_mode='reflect'),
+            nn.BatchNorm1d(convolutions[2]),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size, stride),
+
+            nn.Conv1d(convolutions[2], convolutions[3], kernel_size, padding=padding, padding_mode='reflect'),
+            nn.BatchNorm1d(convolutions[3]),
+            nn.AdaptiveAvgPool1d(self.image_size),  # not sure why but people always end with average pool
         )
 
         self.fully_connected = nn.Sequential(
             nn.Linear(self.image_size * convolutions[-1], hidden_layers[0]),
             nn.BatchNorm1d(num_features=num_channels),
             nn.LeakyReLU(),
+
             nn.Linear(hidden_layers[0], output_size),
             nn.BatchNorm1d(num_features=num_channels),
         )
@@ -127,7 +154,7 @@ class ConvNet(nn.Module):
         ClCd = out[:, :, 0]
         angle = out[:, :, 1]
 
-        return ClCd, angle  # must return a tensor
+        return ClCd, angle
 
 
 # model, loss and optimiser
@@ -148,11 +175,11 @@ if find_LR and not torch.cuda.is_available():
     subprocess.Popen(["kill", "-9", f"{TB_process.pid}"])
     sys.exit("Learning rate plot finished")
 
-# structure of model
-# if not torch.cuda.is_available():
-#     for sample in train_loader:
-#         writer.add_graph(model, sample[0].float())
-#     writer.close()
+# computational graph
+if print_comp_graph:
+    for sample in train_loader:
+        writer.add_graph(model, sample[0].float())
+    writer.close()
 
 # training loop
 running_train_loss = 0.
@@ -254,34 +281,64 @@ with open(print_dir / "test_set_results.txt", 'w') as f:
     for i, (k, v) in enumerate(top_losses.items()):
         f.write(f"{i}. {k}: {v:.2f}\n")
 
-# Visualize feature maps
 if print_activations:
     # TODO: do PCA on activations so that you get the most important (geometrical) features (of an aerofoil)
     #  out of the activations
-    # TODO: add this to tensorboard
-    activation = {}
+    # TODO: add tensorboard functionality
 
     def get_activation(name):
         def hook(_, __, output):
             activation[name] = output.detach()
         return hook
 
-    # model.conv2.register_forward_hook(get_activation('conv2'))
-    activation_str = 'Convolution1'
-    model.extractor[1].register_forward_hook(get_activation(activation_str))
+    for i in range(len(convolutions)):
+        # initialise hook
+        activation = {}
+        activation_str = f'Convolution_#{i}'
+        model.extractor[i * 4].register_forward_hook(get_activation(activation_str))
 
-    # make loader an iterator and get activations
-    dataiter = iter(test_loader)  # using test_loader as it has a batchsize of 1
-    x, y, aerofoil = dataiter.next()
+        # get activations
+        x, y, aerofoil = next(iter(test_loader))  # using test_loader as it has a batchsize of 1
+        output = model(x.float().to(device))
+        act = activation[activation_str].squeeze()
+
+        # plot activations
+        fig, axarr = plt.subplots(act.size(0))
+        for idx in range(act.size(0)):
+            axarr[idx].plot(act[idx])
+        # fig.suptitle(f"Activations of {activation_str}\nAerofoil {aerofoil[0]}")
+        # plt.show()
+        writer.add_figure(f"Activations of {activation_str}\nAerofoil {aerofoil[0]}", fig, global_step=num_epochs)
+        writer.close()
+
+if print_heatmap:
+    def get_activation(name):
+        def hook(_, __, output):
+            activation[name] = output.detach()
+        return hook
+
+    # initialise hook
+    activation = {}
+    model.extractor[-3].register_forward_hook(get_activation('Last_layer'))
+
+    # get activations
+    x, y, aerofoil = next(iter(test_loader))  # using test_loader as it has a batchsize of 1
     output = model(x.float().to(device))
-    act = activation[activation_str].squeeze()
+    act = activation['Last_layer'].squeeze()
 
-    # plot activations
-    fig, axarr = plt.subplots(act.size(0))
-    for idx in range(act.size(0)):
-        axarr[idx].plot(act[idx])
-    fig.suptitle(f"Activations of {activation_str}\nAerofoil {aerofoil[0]}")
-    plt.show()
+    # heat map of last layer
+    average_act = 0
+    for channel in act:
+        average_act += channel
+    average_act /= act.size(0)
+    fig, ax = plt.subplots()
+    ax.plot(x.squeeze())
+    im = ax.imshow(average_act.view(1, -1), alpha=0.5, extent=(0, input_size, torch.min(x) * 1.5, torch.max(x) * 1.5),
+                   interpolation='bilinear', cmap='magma', aspect=input_size)
+    # fig.suptitle(f"Heat map of last_layer\nAerofoil {aerofoil[0]}")
+    # plt.show()
+    writer.add_figure(f"Heat map of last_layer\nAerofoil {aerofoil[0]}", fig, global_step=num_epochs)
+    writer.close()
 
 # kill TensorBoard
 if not torch.cuda.is_available():

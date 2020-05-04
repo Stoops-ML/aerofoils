@@ -17,7 +17,7 @@ class AerofoilDataset(Dataset):
         self.aerofoils = [file for file in os.listdir(root_dir)
                           if re.search(r"(.csv)$", file)]
 
-        # variables
+        # initialise variables
         self.x = [[] for _ in range(len(self.aerofoils))]  # input: coordinates of aerofoil
         self.y = [[] for _ in range(len(self.aerofoils))]  # outputs: max ClCd at angle (2 outputs)
         self.aerofoil = [None for _ in range(len(self.aerofoils))]

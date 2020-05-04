@@ -106,7 +106,7 @@ if __name__ == "__main__":
     title.print_title(["", "Augment aerofoils by changing camber and camber"])
 
     # parameters
-    print_plots = False  # use this to print a before and after of one aerofoil due to Bezier curve
+    print_plots = True  # use this to print a before and after of one aerofoil due to Bezier curve
     num_control_points = 6  # number of control points for camber and thickness (includes 0's at end)
     smallest_modification = 0.01  # absolute value taken
     num_new_aerofoils = 2  # build n new aerofoils with the Bezier control points from one original aerofoil
@@ -134,10 +134,10 @@ if __name__ == "__main__":
                 plt.plot(x, new_y, 'r-', label='modified aerofoil')
                 plt.plot(x[:num_coords // 2], camber, 'b-.', label='original camber')
                 plt.plot(x[:num_coords // 2], new_camber, 'r-.', label='modified camber')
-                # plt.plot(np.linspace(x[num_coords // 2], x[-1], n), Bpoints_camber, "ko",
-                #          label='camber control points')
-                # plt.plot(np.linspace(x[num_coords // 2], x[-1], n), Bpoints_thickness, "g*",
-                #          label='thickness control points')
+                plt.plot(np.linspace(x[num_coords // 2], x[-1], n), Bpoints_camber, "ko",
+                         label='camber control points')
+                plt.plot(np.linspace(x[num_coords // 2], x[-1], n), Bpoints_thickness, "g*",
+                         label='thickness control points')
                 plt.legend(loc="upper right")
                 plt.show()
 

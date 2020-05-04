@@ -32,6 +32,9 @@ modify the thickness and camber of pre-existing aerofoils using random values.
 This outputs csv files in the correct format for the neural network, but excludes the aerodynamic data. Therefore, these
 augmented aerofoils will need to be run through XFoil.
 - learning rate finder plot available in [run_CNN script](run_CNN.py) by toggling `find_LR = True`
+- heat map available by toggling `print_heatmap = True`
+- plot of all activations of all layers available by toggling `print_activations = True`
+- the computational graph is available by toggling `print_comp_graph = True`
 - convolutional neural network found in [run_CNN script](run_CNN.py). Allow learning by toggling `find_LR = False`
 
 ### Resources
@@ -45,7 +48,6 @@ Note that [Airfoil Tools](airfoiltools.com) provide aerodynamic data from
 
 ### To Do
 - [ShowAerofoil.py](ShowAerofoil.py) needs to be updated for TensorBoard
-- make print activations method in [run_CNN script](run_CNN.py) more robust
 - look into aerofoil transformsations. Currently there is on a flip horizontal transformation (not yet implemented)
 - apply PCA on the activations from the convolutions. This will get the most important geometrical features of the aerofoil. From this, plot a graph of two (or three) features against each other for each aerofoil. This should cluster similar aerofoils together and might show interesting latent features.
 
