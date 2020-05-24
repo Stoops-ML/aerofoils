@@ -13,6 +13,7 @@ import AerofoilDataset as AD
 import TitleSequence as Title
 import warnings
 import sys
+from NeuralNets import *
 import subprocess
 if not torch.cuda.is_available():
     import ShowAerofoil as show
@@ -34,7 +35,7 @@ if torch.cuda.is_available():  # not available on cuda
 
 # hyper parameters
 hidden_layers = [300]
-convolutions = [6, 16, 32, 64]
+convolutions = [6, 16, 32]
 num_epochs = 1
 bs = 5
 learning_rate = 0.01
@@ -94,7 +95,7 @@ test_dataset = AD.AerofoilDataset(test_dir, num_channels, input_size, output_siz
 
 # dataloaders
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)
-valid_loader = DataLoader(dataset=valid_dataset, batch_size=bs, shuffle=False, num_workers=4)
+valid_loader = DataLoader(dataset=valid_dataset, batch_size=bs*2, shuffle=False, num_workers=4)  # not storing gradients, so can double bs
 test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=4)  # bs=1 required for top_losses()
 
 # show aerofoils
@@ -103,62 +104,8 @@ test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_
     # for i, batch in enumerate(valid_loader):
     #     show.show_aerofoil_batch(i, **batch)
 
-
-class ConvNet(nn.Module):
-    def __init__(self):
-        super(ConvNet, self).__init__()
-        kernel_size = 3
-        stride = 1
-        padding = 0
-
-        # input size change due to convolution and pooling
-        self.image_size = int(input_size)
-        for _ in range(len(convolutions) * 2):  # *2 for convolution AND pooling
-            self.image_size = int((self.image_size - kernel_size + 2. * padding) // stride + 1.)
-
-        self.extractor = nn.Sequential(
-            nn.Conv1d(num_channels, convolutions[0], kernel_size, padding=padding, padding_mode='reflect'),
-            nn.BatchNorm1d(convolutions[0]),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size, stride, padding),
-
-            nn.Conv1d(convolutions[0], convolutions[1], kernel_size, padding=padding, padding_mode='reflect'),
-            nn.BatchNorm1d(convolutions[1]),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size, stride),
-
-            nn.Conv1d(convolutions[1], convolutions[2], kernel_size, padding=padding, padding_mode='reflect'),
-            nn.BatchNorm1d(convolutions[2]),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size, stride),
-
-            nn.Conv1d(convolutions[2], convolutions[3], kernel_size, padding=padding, padding_mode='reflect'),
-            nn.BatchNorm1d(convolutions[3]),
-            nn.AdaptiveAvgPool1d(self.image_size),  # not sure why but people always end with average pool
-        )
-
-        self.fully_connected = nn.Sequential(
-            nn.Linear(self.image_size * convolutions[-1], hidden_layers[0]),
-            nn.BatchNorm1d(num_features=num_channels),
-            nn.LeakyReLU(),
-
-            nn.Linear(hidden_layers[0], output_size),
-            nn.BatchNorm1d(num_features=num_channels),
-        )
-
-    def forward(self, x):
-        out = self.extractor(x)
-        out = out.view(-1, num_channels, self.image_size * convolutions[-1])  # -1 for varying batch sizes
-        out = self.fully_connected(out)
-
-        ClCd = out[:, :, 0]
-        angle = out[:, :, 1]
-
-        return ClCd, angle
-
-
 # model, loss and optimiser
-model = ConvNet().to(device)
+model = ConvNet(input_size, convolutions, num_channels, hidden_layers, output_size).to(device)
 criterion = metrics.MyLossFunc()
 optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', patience=5, verbose=True)
@@ -207,6 +154,8 @@ for epoch in range(num_epochs):
             if (i+1) % len(train_loader) == 0:  # after all batches of training set run:
                 with torch.no_grad():  # don't add gradients to computational graph
                     for valid_input, valid_targets, _ in valid_loader:
+                        model.eval()
+
                         # data
                         valid_input = valid_input.to(device)  # y coordinates of aerofoil
                         valid_targets = valid_targets.to(device)  # max ClCd at angle
@@ -231,6 +180,8 @@ for epoch in range(num_epochs):
                 scheduler.step(running_valid_loss)
                 running_train_loss = 0.
                 running_valid_loss = 0.
+                model.train()
+
 if not torch.cuda.is_available():
     writer.close()
 torch.save(model.state_dict(), print_dir / "model.pkl")  # create pickle file

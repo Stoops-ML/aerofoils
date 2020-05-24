@@ -47,6 +47,7 @@ Note that [Airfoil Tools](airfoiltools.com) provide aerodynamic data from
 [XFoil](https://web.mit.edu/drela/Public/web/xfoil/) on their website.
 
 ### To Do
+- change CNN to densenet
 - [ShowAerofoil.py](ShowAerofoil.py) needs to be updated for TensorBoard
 - look into aerofoil transformsations. Currently there is on a flip horizontal transformation (not yet implemented)
 - apply PCA on the activations from the convolutions. This will get the most important geometrical features of the aerofoil. From this, plot a graph of two (or three) features against each other for each aerofoil. This should cluster similar aerofoils together and might show interesting latent features.
