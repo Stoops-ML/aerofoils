@@ -105,7 +105,14 @@ test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_
     #     show.show_aerofoil_batch(i, **batch)
 
 # model, loss and optimiser
-model = ConvNet(input_size, convolutions, num_channels, hidden_layers, output_size).to(device)
+dense_convs = [num_channels, 1, 1]  # todo change this
+transition_convs = [
+    [160, 128],
+    [160, 128],
+    [160, 64]
+]
+model = DenseNet([50], output_size, dense_convs, transition_convs, input_size).to(device)
+# model = ConvNet(input_size, convolutions, num_channels, hidden_layers, output_size).to(device)
 criterion = metrics.MyLossFunc()
 optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', patience=5, verbose=True)
