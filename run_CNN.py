@@ -107,9 +107,9 @@ test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_
 # model, loss and optimiser
 dense_convs = [num_channels, 1, 1]  # todo change this
 transition_convs = [
-    [160, 128],
-    [160, 128],
-    [160, 64]
+    [113, 128],
+    [113, 128],
+    [113, 64]
 ]
 model = DenseNet([50], output_size, dense_convs, transition_convs, input_size).to(device)
 # model = ConvNet(input_size, convolutions, num_channels, hidden_layers, output_size).to(device)

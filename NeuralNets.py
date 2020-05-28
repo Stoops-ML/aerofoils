@@ -67,17 +67,22 @@ class DenseBlock(nn.Module):
         stride = 1  # no reduction in image size
         padding = (stride * (image_size - 1) - image_size + kernel_size) // 2  # no reduction in image size
 
-        channels = [in_channels, 16, 32, 64]
+        # channels = [in_channels, 16, 32, 64]  # sum(channels) must equal number of input channels to transition layer
 
         self.relu = nn.ReLU(inplace=True)
-        self.bn = nn.BatchNorm1d(num_features=channels[0])
+        self.bn = nn.BatchNorm1d(num_features=in_channels)
 
-        self.conv1 = nn.Conv1d(in_channels=channels[0], out_channels=channels[1],
+        self.conv1 = nn.Conv1d(in_channels=in_channels, out_channels=32,
                                kernel_size=kernel_size, stride=stride, padding=padding)
-        self.conv2 = nn.Conv1d(in_channels=sum(channels[:2]), out_channels=channels[2],
+        self.conv2 = nn.Conv1d(in_channels=in_channels+32, out_channels=32,
                                kernel_size=kernel_size, stride=stride, padding=padding)
-        self.conv3 = nn.Conv1d(in_channels=sum(channels[:3]), out_channels=channels[3],
+        self.conv3 = nn.Conv1d(in_channels=in_channels+64, out_channels=32,
                                kernel_size=kernel_size, stride=stride, padding=padding)
+
+        # first denseblock:
+        # in_channels = 64 (output of lowconv)
+        # in_channels + 32*3 = 160 because of the concatenations
+        # therefore input to transitionlayer1 is 160
 
     def forward(self, x):
         out = self.bn(x)  # why is batchnorm done here?
@@ -91,20 +96,7 @@ class DenseBlock(nn.Module):
 
         conv_funcs = [self.conv1, self.conv2, self.conv3]
         for conv in conv_funcs:
-            print(conv)
             out = dense(conv, out)
-
-        # conv2 = self.relu(self.conv2(conv1))
-        # c2_dense = self.relu(torch.cat([conv1, conv2], 1))
-        #
-        # conv3 = self.relu(self.conv3(c2_dense))
-        # c3_dense = self.relu(torch.cat([conv1, conv2, conv3], 1))
-        #
-        # conv4 = self.relu(self.conv4(c3_dense))
-        # c4_dense = self.relu(torch.cat([conv1, conv2, conv3, conv4], 1))
-        #
-        # conv5 = self.relu(self.conv5(c4_dense))
-        # c5_dense = self.relu(torch.cat([conv1, conv2, conv3, conv4, conv5], 1))
 
         return out
 
@@ -130,28 +122,29 @@ class DenseNet(nn.Module):
 
         self.image_size = image_size
         self.num_channels = dense_channels[0]
+        self.transitions = transition_channels
         self.image_out_size = transition_channels[-1][-1]
-        self.lowconv = nn.Conv1d(in_channels=self.num_channels, out_channels=dense_channels[0],
+
+        self.lowconv = nn.Conv1d(in_channels=self.num_channels, out_channels=64,
                                  kernel_size=7, padding=3, bias=False)
         self.relu = nn.ReLU()
 
         # dense blocks
-        self.denseblock1 = nn.Sequential(DenseBlock(dense_channels[0], self.image_size))
-        self.denseblock2 = nn.Sequential(DenseBlock(dense_channels[1], self.image_size))
-        self.denseblock3 = nn.Sequential(DenseBlock(dense_channels[2], self.image_size))
+        self.denseblock1 = nn.Sequential(DenseBlock(64, self.image_size))  # out_channels of lowconv
+        self.denseblock2 = nn.Sequential(DenseBlock(46, self.image_size))  # out_channels of transiontlayer1
+        self.denseblock3 = nn.Sequential(DenseBlock(46, self.image_size))
 
         # transition layers
-        self.transitionLayer1 = nn.Sequential(TransitionLayer(*transition_channels[0]))
-        self.transitionLayer2 = nn.Sequential(TransitionLayer(*transition_channels[1]))
-        self.transitionLayer3 = nn.Sequential(TransitionLayer(*transition_channels[2]))
+        # self.transitionLayer1 = nn.Sequential(TransitionLayer(*transition_channels[0]))
+        self.transitionLayer1 = nn.Sequential(TransitionLayer(160, 46))
+        self.transitionLayer2 = nn.Sequential(TransitionLayer(142, 46))
+        self.transitionLayer3 = nn.Sequential(TransitionLayer(142, 30))
 
         # Classifier
-        self.bn = nn.BatchNorm1d(num_features=self.image_out_size)
-        # self.pre_classifier = nn.Linear(self.tl_out * 4 * 4, 512)
-        # self.classifier = nn.Linear(512, nr_classes)
+        self.bn = nn.BatchNorm1d(num_features=30)  # out_channels of transitionlayer3
 
         self.fully_connected = nn.Sequential(
-            nn.Linear(self.image_out_size, fc_hidden[0]),
+            nn.Linear(30 * 24, fc_hidden[0]),
             nn.BatchNorm1d(num_features=self.num_channels),
             nn.LeakyReLU(),
 
@@ -172,12 +165,9 @@ class DenseNet(nn.Module):
         out = self.transitionLayer3(out)
 
         out = self.bn(out)
-        out = out.view(-1, self.num_channels, self.image_out_size * 4 * 4)
+        out = out.view(-1, self.num_channels, 30 * 24)  # 30 because output of transitionlayer3
+        # todo watch video from python engineer to find out why it's 24 in out.view
 
-        # out = self.pre_classifier(out)
-        # out = self.classifier(out)
-
-        out = self.fully_connected(out)
         ClCd = out[:, :, 0]
         angle = out[:, :, 1]
 
