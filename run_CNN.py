@@ -34,9 +34,10 @@ if torch.cuda.is_available():  # not available on cuda
     print_comp_graph = False
 
 # hyper parameters
-hidden_layers = [300]
-convolutions = [6, 16, 32]
-num_epochs = 1
+hidden_layers = [50]
+# convolutions = [6, 16, 32]
+convolutions = [64, 46, 46, 30]  # input/output channels of convolutions
+num_epochs = 30
 bs = 5
 learning_rate = 0.01
 
@@ -105,13 +106,7 @@ test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_
     #     show.show_aerofoil_batch(i, **batch)
 
 # model, loss and optimiser
-dense_convs = [num_channels, 1, 1]  # todo change this
-transition_convs = [
-    [113, 128],
-    [113, 128],
-    [113, 64]
-]
-model = DenseNet([50], output_size, dense_convs, transition_convs, input_size).to(device)
+model = DenseNet(input_size, output_size, convolutions, hidden_layers, num_channels, 32).to(device)
 # model = ConvNet(input_size, convolutions, num_channels, hidden_layers, output_size).to(device)
 criterion = metrics.MyLossFunc()
 optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)

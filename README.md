@@ -1,5 +1,5 @@
 # Aerofoils Learner
-Convolutional neural network to learn the maximum lift-to-drag ratio at angle for 2D aerofoils.
+Deeply connected onvolutional neural network to learn the maximum lift-to-drag ratio at angle for 2D aerofoils.
 
 Maximum lift-to-drag ratio at angle is an important aerodynamic property of aircraft wings:
 ![alt text](https://cdn.comsol.com/wordpress/2015/06/Angle-of-attack-with-lift-and-drag.png "Sample aerofoil")
@@ -35,7 +35,7 @@ augmented aerofoils will need to be run through XFoil.
 - heat map available by toggling `print_heatmap = True`
 - plot of all activations of all layers available by toggling `print_activations = True`
 - the computational graph is available by toggling `print_comp_graph = True`
-- convolutional neural network found in [run_CNN script](run_CNN.py). Allow learning by toggling `find_LR = False`
+- neural networks found in [neural network script](NeuralNets.py). Allow learning by toggling `find_LR = False`
 
 ### Resources
 - aerofoils downloaded from [Airfoil Tools](airfoiltools.com), with aerodynamic data provided by 
@@ -45,6 +45,7 @@ augmented aerofoils will need to be run through XFoil.
 aerodynamic data for augmented aerofoils. This is fundamental as the current CNN is trained on only 1550 examples. 
 Note that [Airfoil Tools](airfoiltools.com) provide aerodynamic data from 
 [XFoil](https://web.mit.edu/drela/Public/web/xfoil/) on their website.
+- deeply connected neural network [example](https://towardsdatascience.com/simple-implementation-of-densely-connected-convolutional-networks-in-pytorch-3846978f2f36)
 
 ### To Do
 - change CNN to densenet
@@ -59,3 +60,6 @@ around with the number of control points for thickness and camber and their size
 number of control points and their lower bound has been decided, turn `print_plots = False` to create new 
 aerofoils. Not all the augmented aerofoils will be valid, and a certain of amount of playing around with the parameters 
 is required
+- the convolutional neural network found in the [neural network script](NeuralNets.py) is now depreciated. This has been 
+replaced by a deeply connected neural network, which performs more than 10 times better. The CNN produced a root-mean 
+square error of 3.87, in comparison to 0.91 for the deeply connected neural network
