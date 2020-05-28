@@ -102,13 +102,13 @@ class DenseBlock(nn.Module):
 
 
 class TransitionLayer(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, ks=3, st=2, p=0):
         super().__init__()
 
         self.relu = nn.ReLU(inplace=True)
         self.bn = nn.BatchNorm1d(num_features=out_channels)
         self.conv = nn.Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, bias=False)
-        self.avg_pool = nn.AvgPool1d(kernel_size=3, stride=2, padding=0)  # image size reduction
+        self.avg_pool = nn.AvgPool1d(kernel_size=ks, stride=st, padding=p)  # image size reduction
 
     def forward(self, x):
         bn = self.bn(self.relu(self.conv(x)))
@@ -123,10 +123,10 @@ class DenseNet(nn.Module):
         self.image_size = image_size
         self.num_channels = dense_channels[0]
         self.transitions = transition_channels
-        self.image_out_size = transition_channels[-1][-1]
 
-        self.lowconv = nn.Conv1d(in_channels=self.num_channels, out_channels=64,
-                                 kernel_size=7, padding=3, bias=False)
+        self.lowconv = nn.Conv1d(in_channels=self.num_channels, out_channels=64, stride=1, kernel_size=7,
+                                 padding=(1 * (image_size - 1) - image_size + 7) // 2,
+                                 bias=False)  # image size unchanged
         self.relu = nn.ReLU()
 
         # dense blocks
@@ -135,10 +135,16 @@ class DenseNet(nn.Module):
         self.denseblock3 = nn.Sequential(DenseBlock(46, self.image_size))
 
         # transition layers
+        ks, st, p = 3, 2, 0
         # self.transitionLayer1 = nn.Sequential(TransitionLayer(*transition_channels[0]))
-        self.transitionLayer1 = nn.Sequential(TransitionLayer(160, 46))
-        self.transitionLayer2 = nn.Sequential(TransitionLayer(142, 46))
-        self.transitionLayer3 = nn.Sequential(TransitionLayer(142, 30))
+        self.transitionLayer1 = nn.Sequential(TransitionLayer(160, 46, ks=ks, st=st, p=p))
+        self.transitionLayer2 = nn.Sequential(TransitionLayer(142, 46, ks=ks, st=st, p=p))
+        self.transitionLayer3 = nn.Sequential(TransitionLayer(142, 30, ks=ks, st=st, p=p))
+
+        # image size change due to transitional layers (dense blocks don't change image size)
+        self.image_outsize = self.image_size  # initialise
+        for _ in range(3):  # 3 for number of transitional layers
+            self.image_outsize = (self.image_outsize - ks + 2 * p) // st + 1
 
         # Classifier
         self.bn = nn.BatchNorm1d(num_features=30)  # out_channels of transitionlayer3
@@ -165,8 +171,7 @@ class DenseNet(nn.Module):
         out = self.transitionLayer3(out)
 
         out = self.bn(out)
-        out = out.view(-1, self.num_channels, 30 * 24)  # 30 because output of transitionlayer3
-        # todo watch video from python engineer to find out why it's 24 in out.view
+        out = out.view(-1, self.num_channels, 30 * self.image_outsize)  # 30 because output of transitionlayer3
 
         ClCd = out[:, :, 0]
         angle = out[:, :, 1]
