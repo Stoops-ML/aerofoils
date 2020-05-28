@@ -3,6 +3,19 @@ import torch
 import sys
 
 
+def calc_padding(image_size, stride, kernel_size):
+    """returns padding for convolution such that input image size = output image size"""
+    return (stride * (image_size - 1) - image_size + kernel_size) // 2
+
+
+def calc_image_out_size(image_in_size, kernel_size, padding, stride, num_layers):
+    """image size change due to convolutions"""
+    image_out_size = image_in_size  # initialise
+    for _ in range(num_layers):
+        image_out_size = (image_out_size - kernel_size + 2 * padding) // stride + 1
+    return image_out_size
+
+
 class ConvNet(nn.Module):
     def __init__(self, input_size, convolutions, num_channels, hidden_layers, output_size):
         super(ConvNet, self).__init__()
@@ -62,33 +75,34 @@ class ConvNet(nn.Module):
 
 class DenseBlock(nn.Module):
     def __init__(self, in_channels, image_size, dense_out_channels, num_convs):
+        """make a dense block"""
         super().__init__()
         kernel_size = 3
         stride = 1  # no reduction in image size
-        padding = (stride * (image_size - 1) - image_size + kernel_size) // 2  # no reduction in image size
+        padding = calc_padding(image_size, stride, kernel_size)
         self.num_convs = num_convs
 
         self.relu = nn.ReLU(inplace=True)
         self.bn = nn.BatchNorm1d(num_features=in_channels)
 
-        def make_conv(i):
+        def make_conv_layer(i):  # make a layer in the dense block
             return nn.Sequential(nn.Conv1d(in_channels=in_channels + dense_out_channels*i,
                                            out_channels=dense_out_channels, kernel_size=kernel_size,
                                            stride=stride, padding=padding))
 
-        self.convs = [make_conv(i) for i in range(num_convs)]
+        self.dense_block = nn.ModuleList([make_conv_layer(i) for i in range(num_convs)])  # list of layers in the dense block
 
     def forward(self, x):
-        out = self.bn(x)  # why is batchnorm done here?
-        self.out_conv = out  # todo figure out how to pass out_conv to dense() without 'self.'. nonlocal out_conv didn't work
+        out = self.bn(x)  # todo why is batchnorm done here?
 
         def dense(conv_func, dense_in):
+            nonlocal out
             conv = self.relu(conv_func(dense_in))
-            self.out_conv = torch.cat([self.out_conv, conv], 1)  # concatenate in channel dimension
-            dense_out = self.relu(self.out_conv)
+            out_conv = torch.cat([out, conv], 1)  # concatenate in channel dimension
+            dense_out = self.relu(out_conv)
             return dense_out
 
-        for conv in self.convs:
+        for conv in self.dense_block:
             out = dense(conv, out)
 
         return out
@@ -96,6 +110,7 @@ class DenseBlock(nn.Module):
 
 class TransitionLayer(nn.Module):
     def __init__(self, in_channels, out_channels, ks=3, st=2, p=0):
+        """make a transition layer"""
         super().__init__()
 
         self.relu = nn.ReLU(inplace=True)
@@ -111,6 +126,7 @@ class TransitionLayer(nn.Module):
 
 class DenseNet(nn.Module):
     def __init__(self, image_size, output_size, convolutions, fc_hidden, num_channels, dense_out_channels):
+        """create a densely connected convolutional neural network"""
         super().__init__()
 
         self.image_size = image_size  # original image size
@@ -124,21 +140,19 @@ class DenseNet(nn.Module):
 
         # low convolution
         self.lowconv = nn.Conv1d(in_channels=self.num_channels, out_channels=convolutions[0], stride=1, kernel_size=7,
-                                 padding=(1 * (image_size - 1) - image_size + 7) // 2,  # image size unchanged
+                                 padding=calc_padding(image_size, 1, 7),  # image size unchanged
                                  bias=False)  # TODO: bias terms set to false. Set them to true?
 
-        def make_block_and_layer(i):
+        def make_block_and_layer(i):  # make a dense block followed by a transition layer
             return nn.Sequential(DenseBlock(convolutions[i], self.image_size, dense_out_channels, num_convs),
                                  TransitionLayer(convolutions[i] + dense_out_channels * num_convs,
                                                  convolutions[i+1], ks=ks, st=st, p=p))
 
-        # make dense block followed by transition layer
-        self.block_and_layer = [make_block_and_layer(i) for i in range(num_convs)]
+        # make dense net. ModuleList required (instead of list) to activate cuda
+        self.block_and_layer = nn.ModuleList([make_block_and_layer(i) for i in range(num_convs)])
 
         # image size change due to transitional layers (dense blocks don't change image size)
-        self.image_outsize = self.image_size  # initialise
-        for _ in range(num_convs):
-            self.image_outsize = (self.image_outsize - ks + 2 * p) // st + 1
+        self.image_outsize = calc_image_out_size(self.image_size, ks, p, st, num_convs)
 
         # fully connected layer (reduces loss by ~20%)
         self.bn = nn.BatchNorm1d(num_features=convolutions[-1])
