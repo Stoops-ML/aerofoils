@@ -35,7 +35,7 @@ if torch.cuda.is_available():  # not available on cuda
 
 # hyper parameters
 hidden_layers = [50]
-# convolutions = [6, 16, 32]
+# convolutions = [6, 16, 32]  for ConvNet
 convolutions = [64, 46, 46, 30]  # input/output channels of convolutions
 num_epochs = 30
 bs = 5

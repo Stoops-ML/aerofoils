@@ -85,12 +85,12 @@ class DenseBlock(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.bn = nn.BatchNorm1d(num_features=in_channels)
 
-        def make_conv_layer(i):  # make a layer in the dense block
-            return nn.Sequential(nn.Conv1d(in_channels=in_channels + dense_out_channels*i,
+        def conv_layer(i):  # make a layer in the dense block
+            return nn.Sequential(nn.Conv1d(in_channels=in_channels + dense_out_channels * i,
                                            out_channels=dense_out_channels, kernel_size=kernel_size,
                                            stride=stride, padding=padding))
 
-        self.dense_block = nn.ModuleList([make_conv_layer(i) for i in range(num_convs)])  # list of layers in the dense block
+        self.dense_block = nn.ModuleList([conv_layer(i) for i in range(num_convs)])  # list of layers in dense block
 
     def forward(self, x):
         out = self.bn(x)  # todo why is batchnorm done here?
@@ -124,6 +124,25 @@ class TransitionLayer(nn.Module):
         return out
 
 
+class FullyConnected(nn.Module):
+    def __init__(self, channels_list, indx, num_channels):
+        """make layer in fully connected neural network"""
+        super().__init__()
+
+        self.use_relu = False if (len(channels_list) - 2) == indx else True  # don't use ReLU if last layer in fc NN
+
+        self.linear = nn.Linear(channels_list[indx], channels_list[indx+1])
+        self.bn = nn.BatchNorm1d(num_features=num_channels)
+        if self.use_relu:
+            self.relu = nn.LeakyReLU()
+
+    def forward(self, x):
+        out = self.bn(self.linear(x))
+        if self.use_relu:
+            out = self.relu(out)
+        return out
+
+
 class DenseNet(nn.Module):
     def __init__(self, image_size, output_size, convolutions, fc_hidden, num_channels, dense_out_channels):
         """create a densely connected convolutional neural network"""
@@ -151,31 +170,27 @@ class DenseNet(nn.Module):
         # make dense net. ModuleList required (instead of list) to activate cuda
         self.block_and_layer = nn.ModuleList([make_block_and_layer(i) for i in range(num_convs)])
 
-        # image size change due to transitional layers (dense blocks don't change image size)
-        self.image_outsize = calc_image_out_size(self.image_size, ks, p, st, num_convs)
-
-        # fully connected layer (reduces loss by ~20%)
+        # make fully connected layers (reduces loss by ~20%)
         self.bn = nn.BatchNorm1d(num_features=convolutions[-1])
-        self.fully_connected = nn.Sequential(
-            nn.Linear(convolutions[-1] * self.image_outsize, fc_hidden[0]),
-            nn.BatchNorm1d(num_features=self.num_channels),
-            nn.LeakyReLU(),
+        self.image_outsize = calc_image_out_size(self.image_size, ks, p, st, num_convs)  # image size change due to transitional layers (dense blocks don't change image size)
+        fc_layers = [convolutions[-1] * self.image_outsize] + fc_hidden + [output_size]  # include first and last layer
 
-            nn.Linear(fc_hidden[0], output_size),
-            nn.BatchNorm1d(num_features=self.num_channels),
-        )
+        def make_fully_connected_net(i):  # make a fully connected neural network
+            return FullyConnected(fc_layers, i, num_channels)
+
+        self.fully_connected = nn.ModuleList([make_fully_connected_net(i) for i in range(len(fc_layers) - 1)])
 
     def forward(self, x):
-        out = self.relu(self.lowconv(x))
+        out = self.relu(self.lowconv(x))  # first convolution
 
         for block_and_layer in self.block_and_layer:
-            out = block_and_layer(out)
+            out = block_and_layer(out)  # run a dense block followed by transition layer
 
         out = self.bn(out)
-        out = out.view(-1, self.num_channels, self.convolutions[-1] * self.image_outsize)
-        out = self.fully_connected(out)
+        out = out.view(-1, self.num_channels, self.convolutions[-1] * self.image_outsize)  # resize for num of channels
 
-        ClCd = out[:, :, 0]
-        angle = out[:, :, 1]
+        for fc_layer in self.fully_connected:
+            out = fc_layer(out)  # run a fully connected layer
 
-        return ClCd, angle
+        # outputs: ClCd, angle
+        return out[:, :, 0], out[:, :, 1]
