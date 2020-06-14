@@ -36,7 +36,7 @@ if torch.cuda.is_available():  # not available on cuda
 # hyper parameters
 hidden_layers = [50]
 # convolutions = [6, 16, 32]  for ConvNet
-convolutions = [15, 46, 46, 30]  # input/output channels of convolutions
+convolutions = [64, 46, 46, 30]  # input/output channels of convolutions
 num_epochs = 1
 bs = 5
 learning_rate = 0.01
@@ -155,8 +155,8 @@ for epoch in range(num_epochs):
             # calculate validation loss
             if (i+1) % len(train_loader) == 0:  # after all batches of training set run:
                 with torch.no_grad():  # don't add gradients to computational graph
+                    model.eval()
                     for valid_input, valid_targets, _ in valid_loader:
-                        model.eval()
 
                         # data
                         valid_input = valid_input.to(device)  # y coordinates of aerofoil
@@ -237,13 +237,13 @@ with open(print_dir / "test_set_results.txt", 'w') as f:
 if print_activations:
     # TODO: do PCA on activations so that you get the most important (geometrical) features (of an aerofoil)
     #  out of the activations
-    # TODO: add tensorboard functionality
 
     def get_activation(name):
         def hook(_, __, output):
             activation[name] = output.detach()
         return hook
 
+    # use this to find whether activations are useful (i.e. whether they have a value - if 0 then they're not useful)
     for i in range(len(convolutions)):
         # initialise hook
         activation = {}
@@ -262,7 +262,7 @@ if print_activations:
         fig.suptitle(f"Activations of {activation_str}\nAerofoil {aerofoil[0]}")
         plt.show()
         writer.add_figure(f"Activations of {activation_str}\nAerofoil {aerofoil[0]}", fig, global_step=num_epochs)
-        writer.close()
+        writer.close()  # todo TB doesn't print image
 
 if print_heatmap:
     def get_activation(name):
