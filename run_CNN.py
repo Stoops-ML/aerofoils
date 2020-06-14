@@ -23,10 +23,10 @@ if not torch.cuda.is_available():
 
 # output switches
 find_LR = False
-print_activations = False
-print_heatmap = False
-print_comp_graph = False
-print_epoch = 1  # print output & plot losses after n epochs (after doing all batches within epoch)
+print_activations = True
+print_heatmap = True
+print_comp_graph = True
+print_epoch = 1  # calculate and print output & plot losses after n epochs (after doing all batches within epoch)
 if torch.cuda.is_available():  # not available on cuda
     find_LR = False
     print_activations = False
@@ -36,8 +36,8 @@ if torch.cuda.is_available():  # not available on cuda
 # hyper parameters
 hidden_layers = [50]
 # convolutions = [6, 16, 32]  for ConvNet
-convolutions = [64, 46, 46, 30]  # input/output channels of convolutions
-num_epochs = 30
+convolutions = [15, 46, 46, 30]  # input/output channels of convolutions
+num_epochs = 1
 bs = 5
 learning_rate = 0.01
 
@@ -63,7 +63,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # title sequence
 tensorboard_str = "TensorBoard running" if not torch.cuda.is_available() else "Tensorboard NOT running"
-Title.print_title([" ", "Convolutional neural network", "Outputs: Max ClCd @ angle",
+Title.print_title([" ", "Densely connected CNN", "Outputs: Max ClCd @ angle",
                    tensorboard_str, f"Output directory: {'print/' + time_of_run}"])
 
 # write log file of architecture and for note taking
@@ -77,12 +77,11 @@ with open(print_dir / "log.txt", 'w') as f:
     f.write(f"Convolutions = {convolutions}\n")
 
 # get input size, output size and number of channels
-file = os.listdir(train_dir)[0] if '.csv' in os.listdir(train_dir)[0] else os.listdir(train_dir)[1]  # sample file
-coords = np.loadtxt(train_dir / file, delimiter=" ", dtype=np.float32, skiprows=1)  # xy coordinates of sample
+coords = np.loadtxt(train_dir / train_aerofoils[0], delimiter=" ", dtype=np.float32, skiprows=1)  # coords of sample
 input_size = len(coords)
-with open(train_dir / file) as f:
-    line = f.readline()
-    y_vals = [float(num) for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']  # outputs of sample
+with open(train_dir / train_aerofoils[0]) as f:
+    line = f.readline()  # max ClCd & angle are on first line of file
+    y_vals = [num for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']  # outputs of sample
     output_size = len(y_vals)
 num_channels = 1  # one channel for y coordinate (xy coordinates requires two channels)
 
@@ -107,6 +106,7 @@ test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_
 
 # model, loss and optimiser
 model = DenseNet(input_size, output_size, convolutions, hidden_layers, num_channels, 32).to(device)
+print(model)
 # model = ConvNet(input_size, convolutions, num_channels, hidden_layers, output_size).to(device)
 criterion = metrics.MyLossFunc()
 optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -227,8 +227,8 @@ with torch.no_grad():  # don't add gradients of test set to computational graph
 with open(print_dir / "test_set_results.txt", 'w') as f:
     f.write(f"Number of epochs = {num_epochs}\n"
             f"Running test loss = {running_test_loss:.4f}\n"
-            f"ClCd RMS: {metrics.root_mean_square(test_predictions_list, test_targets_list):.2f}\n"
-            f"angle RMS: {metrics.root_mean_square(test_predictions_list, test_targets_list):.2f}\n"
+            f"ClCd RMS: {metrics.root_mean_square(test_predictions_list[:, 0], test_targets_list[:, 0]):.2f}\n"
+            f"angle RMS: {metrics.root_mean_square(test_predictions_list[:, 1], test_targets_list[:, 1]):.2f}\n"
             f"\nTop losses:\n")
 
     for i, (k, v) in enumerate(top_losses.items()):
@@ -248,7 +248,7 @@ if print_activations:
         # initialise hook
         activation = {}
         activation_str = f'Convolution_#{i}'
-        model.extractor[i * 4].register_forward_hook(get_activation(activation_str))
+        model.block_and_layer[i * 4].register_forward_hook(get_activation(activation_str))  # todo fix this
 
         # get activations
         x, y, aerofoil = next(iter(test_loader))  # using test_loader as it has a batchsize of 1
@@ -259,8 +259,8 @@ if print_activations:
         fig, axarr = plt.subplots(act.size(0))
         for idx in range(act.size(0)):
             axarr[idx].plot(act[idx])
-        # fig.suptitle(f"Activations of {activation_str}\nAerofoil {aerofoil[0]}")
-        # plt.show()
+        fig.suptitle(f"Activations of {activation_str}\nAerofoil {aerofoil[0]}")
+        plt.show()
         writer.add_figure(f"Activations of {activation_str}\nAerofoil {aerofoil[0]}", fig, global_step=num_epochs)
         writer.close()
 
@@ -272,7 +272,7 @@ if print_heatmap:
 
     # initialise hook
     activation = {}
-    model.extractor[-3].register_forward_hook(get_activation('Last_layer'))
+    model.block_and_layer[-1].register_forward_hook(get_activation('Last_layer'))
 
     # get activations
     x, y, aerofoil = next(iter(test_loader))  # using test_loader as it has a batchsize of 1
@@ -291,7 +291,7 @@ if print_heatmap:
     # fig.suptitle(f"Heat map of last_layer\nAerofoil {aerofoil[0]}")
     # plt.show()
     writer.add_figure(f"Heat map of last_layer\nAerofoil {aerofoil[0]}", fig, global_step=num_epochs)
-    writer.close()
+    writer.close()  # todo figure not printing to TB (but prints to plt.show)
 
 # kill TensorBoard
 if not torch.cuda.is_available():

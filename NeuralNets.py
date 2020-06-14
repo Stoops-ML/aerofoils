@@ -86,18 +86,18 @@ class DenseBlock(nn.Module):
         self.bn = nn.BatchNorm1d(num_features=in_channels)
 
         def conv_layer(i):  # make a layer in the dense block
-            return nn.Sequential(nn.Conv1d(in_channels=in_channels + dense_out_channels * i,
-                                           out_channels=dense_out_channels, kernel_size=kernel_size,
-                                           stride=stride, padding=padding))
+            return nn.Conv1d(in_channels=in_channels + dense_out_channels * i,
+                             out_channels=dense_out_channels, kernel_size=kernel_size,
+                             stride=stride, padding=padding)
 
         self.dense_block = nn.ModuleList([conv_layer(i) for i in range(num_convs)])  # list of layers in dense block
 
     def forward(self, x):
-        out = self.bn(x)  # todo why is batchnorm done here?
+        out = self.bn(x)
 
         def dense(conv_func, dense_in):
             nonlocal out
-            conv = self.relu(conv_func(dense_in))
+            conv = self.relu(conv_func(dense_in))  # do convolution
             out_conv = torch.cat([out, conv], 1)  # concatenate in channel dimension
             dense_out = self.relu(out_conv)
             return dense_out
@@ -115,7 +115,8 @@ class TransitionLayer(nn.Module):
 
         self.relu = nn.ReLU(inplace=True)
         self.bn = nn.BatchNorm1d(num_features=out_channels)
-        self.conv = nn.Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, bias=False)
+        # todo play around with ks and stride in conv layer and average pooling layer
+        self.conv = nn.Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, bias=False)  # image size reduction
         self.avg_pool = nn.AvgPool1d(kernel_size=ks, stride=st, padding=p)  # image size reduction
 
     def forward(self, x):
@@ -133,7 +134,7 @@ class FullyConnected(nn.Module):
 
         self.linear = nn.Linear(channels_list[indx], channels_list[indx+1])
         self.bn = nn.BatchNorm1d(num_features=num_channels)
-        if self.use_relu:
+        if self.use_relu:  # todo clean this up
             self.relu = nn.LeakyReLU()
 
     def forward(self, x):
@@ -150,7 +151,7 @@ class DenseNet(nn.Module):
 
         self.image_size = image_size  # original image size
         self.num_channels = num_channels  # number of input channels
-        num_convs = len(convolutions) - 1  # number of convolutions in a dense block
+        num_convs = len(convolutions) - 1  # number of convolutions in a dense block (-1 for lowconv)
         # num_convs equals number of layers of densenet because it defines the inputs to the transition layers
         # therefore no need for another variable defining number of layers of densenet
         self.relu = nn.ReLU()
@@ -163,6 +164,8 @@ class DenseNet(nn.Module):
                                  bias=False)  # TODO: bias terms set to false. Set them to true?
 
         def make_block_and_layer(i):  # make a dense block followed by a transition layer
+            # TODO issue with input image_size of DenseBlock: it remains constant when it should be changing as the
+            #  transition layer changes the image size (through stride=2 conv and average pooling)
             return nn.Sequential(DenseBlock(convolutions[i], self.image_size, dense_out_channels, num_convs),
                                  TransitionLayer(convolutions[i] + dense_out_channels * num_convs,
                                                  convolutions[i+1], ks=ks, st=st, p=p))
@@ -186,7 +189,7 @@ class DenseNet(nn.Module):
         for block_and_layer in self.block_and_layer:
             out = block_and_layer(out)  # run a dense block followed by transition layer
 
-        out = self.bn(out)
+        out = self.bn(out)  # TODO transition layer outputs batchnorm followed by average pooling -> need another bn?
         out = out.view(-1, self.num_channels, self.convolutions[-1] * self.image_outsize)  # resize for num of channels
 
         for fc_layer in self.fully_connected:

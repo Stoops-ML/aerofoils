@@ -48,7 +48,6 @@ Note that [Airfoil Tools](airfoiltools.com) provide aerodynamic data from
 - deeply connected neural network [example](https://towardsdatascience.com/simple-implementation-of-densely-connected-convolutional-networks-in-pytorch-3846978f2f36)
 
 ### To Do
-- change CNN to densenet
 - [ShowAerofoil.py](ShowAerofoil.py) needs to be updated for TensorBoard
 - look into aerofoil transformsations. Currently there is on a flip horizontal transformation (not yet implemented)
 - apply PCA on the activations from the convolutions. This will get the most important geometrical features of the aerofoil. From this, plot a graph of two (or three) features against each other for each aerofoil. This should cluster similar aerofoils together and might show interesting latent features.

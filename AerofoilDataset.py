@@ -14,8 +14,7 @@ class AerofoilDataset(Dataset):
 
         # paths and files
         self.root_dir = Path(root_dir)
-        self.aerofoils = [file for file in os.listdir(root_dir)
-                          if re.search(r"(.csv)$", file)]
+        self.aerofoils = [file for file in os.listdir(root_dir) if re.search(r"(.csv)$", file)]
 
         # initialise variables
         self.x = [[] for _ in range(len(self.aerofoils))]  # input: coordinates of aerofoil
@@ -35,12 +34,13 @@ class AerofoilDataset(Dataset):
         if torch.is_tensor(item):
             item = item.tolist()
 
-        # get coordinates and max ClCd at angle
+        # get max ClCd at angle
         with open(self.root_dir / self.aerofoils[item]) as f:
             line = f.readline()
             y_vals = [float(num) for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']
             max_ClCd, angle = y_vals[0], y_vals[1]
 
+        # get coordinates
         coords = np.loadtxt(self.root_dir / self.aerofoils[item], delimiter=" ", dtype=np.float32, skiprows=1)
 
         # organise data
@@ -75,7 +75,7 @@ class NormaliseYValues:
     def __init__(self, aerofoils, dir):
         """find mean and standard deviation of all 'aerofoils' in directory 'dir' """
 
-        # get all y values: max ClCd, angle
+        # get all output values: max ClCd, angle
         ClCd_list = []
         angle_list = []
         for aerofoil in aerofoils:
@@ -94,9 +94,9 @@ class NormaliseYValues:
         self.ClCd_SD = np.sqrt(sum(ClCd_list_SD) / len(aerofoils))
         self.angle_SD = np.sqrt(sum(angle_list_SD) / len(aerofoils))
 
-    def __call__(self, sample):
+    def __call__(self, outputs):
         """normalise y values of sample 'sample'.
-         mean 0 and variance 1 (best for backprop to have range of [-1,1], not [0,1]"""
-        sample[0, 0] = (sample[0, 0] - self.ClCd_mean) / self.ClCd_SD  # normalise max ClCd
-        sample[0, 1] = (sample[0, 1] - self.angle_mean) / self.angle_SD  # normalise angle
-        return sample
+         mean 0 and variance 1 (best for backprop to have range of [-1,1], not [0,1])"""
+        outputs[0, 0] = (outputs[0, 0] - self.ClCd_mean) / self.ClCd_SD  # normalise max ClCd
+        outputs[0, 1] = (outputs[0, 1] - self.angle_mean) / self.angle_SD  # normalise angle
+        return outputs
