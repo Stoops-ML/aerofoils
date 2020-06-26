@@ -72,8 +72,10 @@ class FlipHorizontalRandom:
 
 
 class NormaliseYValues:
-    def __init__(self, aerofoils, dir):
+    def __init__(self, dir):
         """find mean and standard deviation of all 'aerofoils' in directory 'dir' """
+
+        aerofoils = [file for file in os.listdir(dir) if re.search(r"(.csv)$", file)]
 
         # get all output values: max ClCd, angle
         ClCd_list = []

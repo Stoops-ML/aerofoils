@@ -23,8 +23,8 @@ if not torch.cuda.is_available():
 
 # output switches
 find_LR = False
-print_activations = True
-print_heatmap = True
+print_activations = False
+print_heatmap = False
 print_comp_graph = True
 print_epoch = 1  # calculate and print output & plot losses after n epochs (after doing all batches within epoch)
 if torch.cuda.is_available():  # not available on cuda
@@ -45,11 +45,11 @@ learning_rate = 0.01
 time_of_run = datetime.datetime.now().strftime("D%d_%m_%Y_T%H_%M_%S")
 path = Path(__file__).parent
 train_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else 'data') / 'out' / 'train'
-train_aerofoils = [file for file in os.listdir(train_dir) if re.search(r"(.csv)$", file)]
 valid_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else 'data') / 'out' / 'valid'
 test_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else 'data') / 'out' / 'test'
 print_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else '') / 'print' / time_of_run
 print_dir.mkdir()
+# train_aerofoils = [file for file in os.listdir(train_dir) if re.search(r"(.csv)$", file)]
 
 # TensorBoard writer
 if not torch.cuda.is_available():
@@ -77,9 +77,9 @@ with open(print_dir / "log.txt", 'w') as f:
     f.write(f"Convolutions = {convolutions}\n")
 
 # get input size, output size and number of channels
-coords = np.loadtxt(train_dir / train_aerofoils[0], delimiter=" ", dtype=np.float32, skiprows=1)  # coords of sample
+coords = np.loadtxt(train_dir / os.listdir(train_dir)[0], delimiter=" ", dtype=np.float32, skiprows=1)  # coords of sample
 input_size = len(coords)
-with open(train_dir / train_aerofoils[0]) as f:
+with open(train_dir / os.listdir(train_dir)[0]) as f:
     line = f.readline()  # max ClCd & angle are on first line of file
     y_vals = [num for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']  # outputs of sample
     output_size = len(y_vals)
@@ -87,11 +87,11 @@ num_channels = 1  # one channel for y coordinate (xy coordinates requires two ch
 
 # import datasets. Use same scaling for train, valid and test sets
 train_dataset = AD.AerofoilDataset(train_dir, num_channels, input_size, output_size,
-                                   transform=transforms.Compose([AD.NormaliseYValues(train_aerofoils, train_dir)]))
+                                   transform=transforms.Compose([AD.NormaliseYValues(train_dir)]))
 valid_dataset = AD.AerofoilDataset(valid_dir, num_channels, input_size, output_size,
-                                   transform=transforms.Compose([AD.NormaliseYValues(train_aerofoils, train_dir)]))
+                                   transform=transforms.Compose([AD.NormaliseYValues(train_dir)]))
 test_dataset = AD.AerofoilDataset(test_dir, num_channels, input_size, output_size,
-                                  transform=transforms.Compose([AD.NormaliseYValues(train_aerofoils, train_dir)]))
+                                  transform=transforms.Compose([AD.NormaliseYValues(train_dir)]))
 
 # dataloaders
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)

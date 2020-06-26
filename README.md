@@ -36,6 +36,9 @@ augmented aerofoils will need to be run through XFoil.
 - plot of all activations of all layers available by toggling `print_activations = True`
 - the computational graph is available by toggling `print_comp_graph = True`
 - neural networks found in [neural network script](NeuralNets.py). Allow learning by toggling `find_LR = False`
+- scripts will work on GPU if available
+- [interactive 2D PCA figure](2D_PCA.py) plots the two largest principal components of all aerofoils (within a 
+directory), and plots the corresponding aerofoil for easy comparisons 
 
 ### Resources
 - aerofoils downloaded from [Airfoil Tools](airfoiltools.com), with aerodynamic data provided by 
@@ -49,9 +52,9 @@ Note that [Airfoil Tools](airfoiltools.com) provide aerodynamic data from
 
 ### To Do
 - [ShowAerofoil.py](ShowAerofoil.py) needs to be updated for TensorBoard
-- look into aerofoil transformsations. Currently there is on a flip horizontal transformation (not yet implemented)
-- apply PCA on the activations from the convolutions. This will get the most important geometrical features of the aerofoil. From this, plot a graph of two (or three) features against each other for each aerofoil. This should cluster similar aerofoils together and might show interesting latent features.
+- look into aerofoil transformations. Currently there is on a flip horizontal transformation (not yet implemented)
 - include more aerodynamic properties to input
+- plot all aerofoils to make sure that they're valid after aerofoil_redistribution.py
 
 ### Notes
 - [run_NN.py](run_NN.py) depreciated. Current work is being completed on the convolutional neural network only
