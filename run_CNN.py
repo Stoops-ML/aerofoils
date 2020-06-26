@@ -235,8 +235,6 @@ with open(print_dir / "test_set_results.txt", 'w') as f:
         f.write(f"{i}. {k}: {v:.2f}\n")
 
 if print_activations:
-    # TODO: do PCA on activations so that you get the most important (geometrical) features (of an aerofoil)
-    #  out of the activations
 
     def get_activation(name):
         def hook(_, __, output):
