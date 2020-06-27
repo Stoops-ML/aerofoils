@@ -30,7 +30,7 @@ class GetActivations:
 
         # define model parameters
         hidden_layers = [50]
-        convolutions = [64, 46, 46, 30]  # input/output channels of convolutions
+        self.convolutions = [64, 46, 46, 30]  # input/output channels of convolutions
         coords = np.loadtxt(aerofoils_dir / aerofoils[0], delimiter=" ", dtype=np.float32, skiprows=1)  # coords of sample
         input_size = len(coords)
         with open(aerofoils_dir / aerofoils[0]) as f:
@@ -40,7 +40,7 @@ class GetActivations:
         num_channels = 1  # one channel for y coordinate (xy coordinates requires two channels)
 
         # create model
-        self.model = DenseNet(input_size, output_size, convolutions, hidden_layers, num_channels, 32)
+        self.model = DenseNet(input_size, output_size, self.convolutions, hidden_layers, num_channels, 32)
         self.model.load_state_dict(torch.load(model_file, map_location=self.device))
         self.model.eval()
 
@@ -59,8 +59,7 @@ class GetActivations:
             return hook
 
         # initialise
-        pc = np.zeros((len(self.test_loader), 2))
-        explained_ratio = []
+        activations = np.zeros((len(self.test_loader), self.convolutions[-1]))
 
         # get principal components from aerofoils
         for i, (x, _, aerofoil) in enumerate(self.test_loader):
@@ -70,18 +69,15 @@ class GetActivations:
             output = self.model(x.float().to(self.device))
             act = activation['final_convolution'].squeeze()
 
-            # fit the PCA and transform the original data to it
-            principal_components = PCA(n_components=2)
-            X = principal_components.fit_transform(act.T)
+            activations[i] = act[:, 0]
 
-            # new minimum explained ratio found?
-            X_explained_ratio = sum(principal_components.fit(act).explained_variance_ratio_)
-            explained_ratio.append(X_explained_ratio)
+        # fit the PCA and transform the original data to it
+        principal_components = PCA(n_components=2)
+        principal_components.fit(activations)  # fit to 2 eigenvalues (minimise projection error)
+        activations_transformed = principal_components.transform(activations)  # reconstruct from compressed representation
+        expalined_variance = sum(principal_components.explained_variance_ratio_)
 
-            # add principal components to list
-            pc[i] = X[1]
-
-        return pc, explained_ratio
+        return activations_transformed, expalined_variance
 
 
 class PointBrowser(object):
@@ -91,18 +87,17 @@ class PointBrowser(object):
     and 'p' keys to browse through the next and previous points
     """
 
-    def __init__(self, principal_components, ax1, ax2, explained_ratios):
+    def __init__(self, principal_components, ax1, ax2):
 
         # subplots
         self.ax1 = ax1
         self.ax2 = ax2
-        self.text = ax.text(0.05, 0.95, 'explained ratio: 0', transform=ax.transAxes, va='top')
+        self.text = ax.text(0.05, 0.95, 'aerofoil: none', transform=ax.transAxes, va='top')
         self.selected, = self.ax1.plot([principal_components[0, 0]], [principal_components[0, 1]],
                                        'o', ms=12, alpha=0.4, color='yellow', visible=False)
 
         # aerofoils
         self.chosen_aerofoil_ind = 0
-        self.explained_ratios = explained_ratios
         self.principal_components = principal_components
 
     def onpress(self, event):
@@ -155,7 +150,7 @@ class PointBrowser(object):
         self.selected.set_visible(True)
         self.selected.set_data(self.principal_components[self.chosen_aerofoil_ind, 0],
                                self.principal_components[self.chosen_aerofoil_ind, 1])
-        self.text.set_text(f'explained ratio: {self.explained_ratios[self.chosen_aerofoil_ind]:.2f}')
+        self.text.set_text(f'aerofoil: {aerofoils[self.chosen_aerofoil_ind]}')
         fig.canvas.draw()
 
 
@@ -163,17 +158,19 @@ if __name__ == '__main__':
 
     # get principal components of aerofoils
     get_pc = GetActivations()
-    pc, explained_ratios = get_pc()
+    pc, explained_var = get_pc()
 
     # draw figure
     fig, (ax, ax2) = plt.subplots(2, 1)
-    fig.suptitle('use mouse or "n" / "p" keys')
-    ax.title.set_text(f"PCA on activations")
-    ax2.title.set_text(f'aerofoil: none')
+    fig.suptitle("use mouse or 'n'/'p' keys")
+    ax.title.set_text(f"PCA on activations. Explained variance {explained_var:.2f}")
+    ax2.title.set_text(f'aerofoil shape')
     line, = ax.plot(pc[:, 0], pc[:, 1], 'o', picker=5)  # 5 points tolerance
+    for (x, y), aerofoil in zip(pc, aerofoils):
+        ax.text(x, y, aerofoil[:-4])
 
     # make figure interactive
-    browser = PointBrowser(pc, ax, ax2, explained_ratios)
+    browser = PointBrowser(pc, ax, ax2)
     fig.canvas.mpl_connect('pick_event', browser.onpick)
     fig.canvas.mpl_connect('key_press_event', browser.onpress)
 

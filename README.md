@@ -55,6 +55,7 @@ Note that [Airfoil Tools](airfoiltools.com) provide aerodynamic data from
 - look into aerofoil transformations. Currently there is on a flip horizontal transformation (not yet implemented)
 - include more aerodynamic properties to input
 - plot all aerofoils to make sure that they're valid after aerofoil_redistribution.py
+- check if can reduce PCA to only one dimension
 
 ### Notes
 - [run_NN.py](run_NN.py) depreciated. Current work is being completed on the convolutional neural network only
