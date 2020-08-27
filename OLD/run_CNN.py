@@ -1,5 +1,3 @@
-import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import transforms
 import matplotlib.pyplot as plt
@@ -10,13 +8,10 @@ import numpy as np
 import datetime
 import ErrorMetrics as metrics
 import AerofoilDataset as AD
-import TitleSequence as Title
-import warnings
-import sys
+from OLD import TitleSequence as Title
 from NeuralNets import *
 import subprocess
 if not torch.cuda.is_available():
-    import ShowAerofoil as show
     from torch_lr_finder import LRFinder
     import torch.utils.tensorboard as tf
 
@@ -49,12 +44,11 @@ valid_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else 'data'
 test_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else 'data') / 'out' / 'test'
 print_dir = path / ('storage/aerofoils' if torch.cuda.is_available() else '') / 'print' / time_of_run
 print_dir.mkdir()
-# train_aerofoils = [file for file in os.listdir(train_dir) if re.search(r"(.csv)$", file)]
 
 # TensorBoard writer
 if not torch.cuda.is_available():
     writer = tf.SummaryWriter(print_dir / 'TensorBoard_events')
-    TB_process = subprocess.Popen(["tensorboard", f"--logdir={path / 'print'}"], stdout=open(os.devnull, 'w'),
+    TB_process = subprocess.Popen(["tensorboard", f"--logdir={print_dir.parent}"], stdout=open(os.devnull, 'w'),
                                   stderr=subprocess.STDOUT)  # {print_dir} to show just this run
 
 # device configuration
@@ -97,12 +91,6 @@ test_dataset = AD.AerofoilDataset(test_dir, num_channels, input_size, output_siz
 train_loader = DataLoader(dataset=train_dataset, batch_size=bs, shuffle=True, num_workers=4)
 valid_loader = DataLoader(dataset=valid_dataset, batch_size=bs*2, shuffle=False, num_workers=4)  # not storing gradients, so can double bs
 test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=4)  # bs=1 required for top_losses()
-
-# show aerofoils
-# if not torch.cuda.is_available():
-    # show.show_aerofoil(writer, tensorboard=True, **train_dataset[0])
-    # for i, batch in enumerate(valid_loader):
-    #     show.show_aerofoil_batch(i, **batch)
 
 # model, loss and optimiser
 model = DenseNet(input_size, output_size, convolutions, hidden_layers, num_channels, 32).to(device)
@@ -235,7 +223,6 @@ with open(print_dir / "test_set_results.txt", 'w') as f:
         f.write(f"{i}. {k}: {v:.2f}\n")
 
 if print_activations:
-
     def get_activation(name):
         def hook(_, __, output):
             activation[name] = output.detach()

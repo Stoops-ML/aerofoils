@@ -1,21 +1,14 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from torchvision import transforms
 import torch.nn.functional as F
-import matplotlib.pyplot as plt
-import os
-import numpy as np
 from pathlib import Path
-import re
 from tqdm import tqdm
 import datetime
 import ErrorMetrics as metrics
-import sys
 import AerofoilDataset as AD
-import TitleSequence as Title
-import ShowAerofoil as show
-
+from OLD import TitleSequence as Title
 
 # title sequence
 Title.print_title([" ", "Neural network", "Outputs: Max ClCd @ angle"])

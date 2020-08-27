@@ -3,7 +3,7 @@ import scipy.special
 import matplotlib.pyplot as plt
 from pathlib import Path
 import os
-import TitleSequence as title
+from OLD import TitleSequence as title
 import re
 import sys
 import random
@@ -116,7 +116,7 @@ if __name__ == "__main__":
     in_files = root_dir / 'out' / 'test'  # read in aerofoils
     out_files = root_dir / 'augmented_aerofoils'  # print directory
     out_files.mkdir(exist_ok=True)
-    aerofoils = [file for file in os.listdir(in_files) if re.search(r"(.csv)$", file)]
+    aerofoils = [file for file in os.listdir(in_files) if re.search(r"(\.csv)$", file)]
     do_checks(in_files / aerofoils[0])
 
     for aerofoil in aerofoils:

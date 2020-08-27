@@ -19,6 +19,9 @@ predict the aerodynamics within a significantly smaller time frame.
 Currently low fidelity aerodynamic data is being used in the learner, and in time higher fidelity aerodynamic will be acquired. 
 Further, as the project develops 3D wing geometry will replace the 2D aerofoils.  
 
+## Walk-through
+The Jupyter notebook [main](main.ipynb) includes most of the capabilities in the repo. Check it out for a walk-through.
+
 ## Capabilities
 - 2D aerofoil coordinate data with maximum lift-to-drag ratio at angle downloaded with the 
 [aerofoils downloader script](download_aerofoils.py). This outputs csv files in the correct format for the neural network.
@@ -31,12 +34,16 @@ aerofoils have the same x distribution. Therefore, the CNN only takes the y coor
 modify the thickness and camber of pre-existing aerofoils using random values. 
 This outputs csv files in the correct format for the neural network, but excludes the aerodynamic data. Therefore, these
 augmented aerofoils will need to be run through XFoil.
-- learning rate finder plot available in [run_CNN script](run_CNN.py) by toggling `find_LR = True`
-- heat map available by toggling `print_heatmap = True`
-- plot of all activations of all layers available by toggling `print_activations = True`
-- the computational graph is available by toggling `print_comp_graph = True`
-- neural networks found in [neural network script](NeuralNets.py). Allow learning by toggling `find_LR = False`
+- learning rate finder plot available
+- heat map available
+- plot of all activations available
+- the computational graph is available
 - scripts will work on GPU if available
+- augment new aerofoils using the [aerofoil augmentation code](aerofoil_augmentor.py). It is suggested that the user plays 
+around with the number of control points for thickness and camber and their size with `print_plots = True`. Once the 
+number of control points and their lower bound has been decided, turn `print_plots = False` to create new 
+aerofoils. Not all the augmented aerofoils will be valid, and a certain of amount of playing around with the parameters 
+is required
 - [interactive 2D PCA figure](2D_PCA.py) plots the two largest principal components of all aerofoils (within a 
 directory), and plots the corresponding aerofoil for easy comparisons 
 
@@ -52,18 +59,7 @@ Note that [Airfoil Tools](airfoiltools.com) provide aerodynamic data from
 
 ### To Do
 - [ShowAerofoil.py](ShowAerofoil.py) needs to be updated for TensorBoard
-- look into aerofoil transformations. Currently there is on a flip horizontal transformation (not yet implemented)
+- look into aerofoil transformations. Currently there is on a flip horizontal transformation (not yet used)
 - include more aerodynamic properties to input
 - plot all aerofoils to make sure that they're valid after aerofoil_redistribution.py
 - check if can reduce PCA to only one dimension
-
-### Notes
-- [run_NN.py](run_NN.py) depreciated. Current work is being completed on the convolutional neural network only
-- the [aerofoil augmentation](aerofoil_augmentor.py) code can augment new aerofoils. It is suggested that the user plays 
-around with the number of control points for thickness and camber and their size with `print_plots = True`. Once the 
-number of control points and their lower bound has been decided, turn `print_plots = False` to create new 
-aerofoils. Not all the augmented aerofoils will be valid, and a certain of amount of playing around with the parameters 
-is required
-- the convolutional neural network found in the [neural network script](NeuralNets.py) is now depreciated. This has been 
-replaced by a deeply connected neural network, which performs more than 10 times better. The CNN produced a root-mean 
-square error of 3.87, in comparison to 0.91 for the deeply connected neural network

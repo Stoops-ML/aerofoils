@@ -14,7 +14,7 @@ class AerofoilDataset(Dataset):
 
         # paths and files
         self.root_dir = Path(root_dir)
-        self.aerofoils = [file for file in os.listdir(root_dir) if re.search(r"(.csv)$", file)]
+        self.aerofoils = [file for file in os.listdir(root_dir) if re.search(r"(\.csv)$", file)]
 
         # initialise variables
         self.x = [[] for _ in range(len(self.aerofoils))]  # input: coordinates of aerofoil
@@ -37,7 +37,7 @@ class AerofoilDataset(Dataset):
         # get max ClCd at angle
         with open(self.root_dir / self.aerofoils[item]) as f:
             line = f.readline()
-            y_vals = [float(num) for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']
+            y_vals = [float(num) for num in re.findall(r'[\+-]?\d*\.?\d*', line) if num != '']
             max_ClCd, angle = y_vals[0], y_vals[1]
 
         # get coordinates
@@ -75,14 +75,14 @@ class NormaliseYValues:
     def __init__(self, dir):
         """find mean and standard deviation of all 'aerofoils' in directory 'dir' """
 
-        aerofoils = [file for file in os.listdir(dir) if re.search(r"(.csv)$", file)]
+        aerofoils = [file for file in os.listdir(dir) if re.search(r"(\.csv)$", file)]
 
         # get all output values: max ClCd, angle
         ClCd_list = []
         angle_list = []
         for aerofoil in aerofoils:
             with open(dir / aerofoil) as f:
-                outputs = [num for num in re.findall(r'[+-]?\d*[.]?\d*', f.readline()) if num != '']
+                outputs = [num for num in re.findall(r'[\+-]?\d*\.?\d*', f.readline()) if num != '']
                 ClCd_list.append(float(outputs[0]))
                 angle_list.append(float(outputs[1]))
 

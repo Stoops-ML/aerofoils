@@ -3,9 +3,7 @@ from pathlib import Path
 import shutil
 import os
 import re
-import matplotlib.pyplot as plt
-import sys
-import TitleSequence as Title
+from OLD import TitleSequence as Title
 from random import seed, random
 from tqdm import tqdm
 
@@ -40,7 +38,7 @@ with open(in_files / chosen_aerofoil_x) as f:
         if i <= 1:
             continue  # skip first two lines of file
         else:
-            xy = [num for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']
+            xy = [num for num in re.findall(r'[\+-]?\d*\.?\d*', line) if num != '']
             x_target.append(float(xy[0]))
 x_target_half = x_target[len(x_target) // 2:]  # x target is symmetrical top and bottom
 
@@ -59,7 +57,7 @@ for aerofoil in tqdm(aerofoils):
                     # ClCd = (float(outputs[0]) - ClCd_mean) / ClCd_SD
                     # angle = (float(outputs[1]) - angle_mean) / angle_SD
                 else:
-                    xy = [num for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']
+                    xy = [num for num in re.findall(r'[\+-]?\d*\.?\d*', line) if num != '']
                     x_coord.append(float(xy[0]))
                     y_coord.append(float(xy[1]))
 

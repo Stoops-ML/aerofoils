@@ -12,9 +12,9 @@ from sklearn.decomposition import PCA
 
 
 # inputs
-path = Path(__file__).parent
+path = Path()
 aerofoils_dir = path / 'data' / 'out' / 'test'
-aerofoils = [file for file in os.listdir(aerofoils_dir) if re.search(r"(.csv)$", file)]
+aerofoils = [file for file in os.listdir(aerofoils_dir) if re.search(r"(\.csv)$", file)]
 model_file = path / 'model.pkl'
 
 
@@ -35,7 +35,7 @@ class GetActivations:
         input_size = len(coords)
         with open(aerofoils_dir / aerofoils[0]) as f:
             line = f.readline()  # max ClCd & angle are on first line of file
-            y_vals = [num for num in re.findall(r'[+-]?\d*[.]?\d*', line) if num != '']  # outputs of sample
+            y_vals = [num for num in re.findall(r'[\+-]?\d*\.?\d*', line) if num != '']  # outputs of sample
             output_size = len(y_vals)
         num_channels = 1  # one channel for y coordinate (xy coordinates requires two channels)
 
@@ -55,7 +55,6 @@ class GetActivations:
         def get_activation(name):
             def hook(_, __, output):
                 activation[name] = output.detach()
-
             return hook
 
         # initialise
@@ -80,7 +79,7 @@ class GetActivations:
         return activations_transformed, expalined_variance
 
 
-class PointBrowser(object):
+class PointBrowser:
     """
     Click on a point to select and highlight it -- the data that
     generated the point will be shown in the lower axes.  Use the 'n'

@@ -17,7 +17,7 @@ for line in response:
 
     if line_with_aerofoils:
         for aerofoil_found in line_with_aerofoils:
-            url_find = re.search(r'^(">)(.+) - ', aerofoil_found)
+            url_find = re.search(r'^(">)(.+) - ', aerofoil_found)  # should this be (\.+) instead?
             url_identifier = url_find.group(2)
             aerofoil_name_find = re.search(r'[\w\d]+', url_identifier)
             aerofoil_name = aerofoil_name_find.group()
@@ -33,7 +33,7 @@ for line in response:
                 y = []
                 for coords in aerofoil_coords:
                     coords_str = str(coords, 'utf-8').strip()  # convert bytes to string
-                    xy = re.search(r'^([+-]?\d*[.]?\d*)\s+([+-]?\d*[.]?\d*)$', coords_str)
+                    xy = re.search(r'^([\+-]?\d*\.?\d*)\s+([\+-]?\d*\.?\d*)$', coords_str)
                     if xy:
                         x.append(float(xy.group(1)))
                         y.append(float(xy.group(2)))
