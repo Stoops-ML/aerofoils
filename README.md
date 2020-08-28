@@ -24,9 +24,9 @@ The Jupyter notebook [main](main.ipynb) includes most of the capabilities in the
 
 ## Capabilities
 - 2D aerofoil coordinate data with maximum lift-to-drag ratio at angle downloaded with the 
-[aerofoils downloader script](download_aerofoils.py). This outputs csv files in the correct format for the neural network.
+[aerofoils downloader script](preprocessing.py). This outputs csv files in the correct format for the neural network.
 - aerofoil coordinates redistributed along the x axis (according to a sample x axis distribution) to ensure all inputs 
-to the neural network have the same size using the [aerofoil redistribution script](aerofoil_redistribution.py). 
+to the neural network have the same size using the [aerofoil redistribution script](OLD/aerofoil_redistribution.py). 
 Moreover, this allows for a reduction in the number of channels (from two to one) as all 
 aerofoils have the same x distribution. Therefore, the CNN only takes the y coordinates of the aerofoil as input.
 - augmented aerofoils created using the [aerofoil augmentor script](aerofoil_augmentor.py). This uses 

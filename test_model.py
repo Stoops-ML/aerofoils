@@ -1,6 +1,9 @@
-import torch
 import ErrorMetrics as metrics
 import matplotlib.pyplot as plt
+from preprocessing import aerofoil_redistribution
+import torch
+from train_model import load_model
+import numpy as np
 
 
 def test(model, dataloader, dataset, criterion, num_epochs, print_dir, output_size, device='cpu'):
@@ -137,3 +140,27 @@ def heat_map(model, input_size, num_epochs, dataloader=None, sample=None, layer=
     else:
         fig.suptitle(f"Heat map of last_layer\nAerofoil {aerofoil[0]}")
         plt.show()
+
+
+def prediction(model, base_aerofoil, aerofoil_file, redistribute_coordinates=True, redistribute_aerofoil_path=None):
+
+    # preprocess aerofoil
+    if redistribute_coordinates:
+        if not redistribute_aerofoil_path:  # overwrite inputted aerofoil
+            redistribute_aerofoil_path = aerofoil_file.parent
+        aerofoil_redistribution(base_aerofoil, aerofoil_file, redistribute_aerofoil_path, dataset=False)
+
+    # load model
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model, architecture, hyperparameters, extras = load_model('last_checkpoint.pth')
+
+    # get coordinates
+    coordinates = np.loadtxt(aerofoil_file, delimiter=" ", dtype=np.float32)
+    x_coordinates = np.array(coordinates[:, 1], dtype=np.float32)  # inputs as ndarrays
+
+    # convert data to tensor with correct shape
+    x = torch.from_numpy(x_coordinates).view(architecture['num_channels'], architecture['input_size'])
+
+    model.eval()  # turn off batch normalisation and dropout
+    with torch.no_grad():  # don't add gradients of test set to computational graph
+        return model(x.float().to(device))  # predictions

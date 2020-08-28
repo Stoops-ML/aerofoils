@@ -1,32 +1,22 @@
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
+from pathlib import Path
 
 
-def from_dataloader(y, aerofoil_name, writer=None, tensorboard=False):
-    """
-    show 1D plot of aerofoil from the y value output from a dataloader. y is a tensor!
-    """
-    fig = plt.figure()
-    plt.plot(range(y.shape[-1]), y[-1].numpy().squeeze(), 'r-')
-
-    plt.title(aerofoil_name)
-
-    if tensorboard:
-        writer.add_figure(aerofoil_name, fig)
-        writer.close()
-    else:
-        plt.show()
-
-
-def from_file(file, writer=None, tensorboard=False):
+def show_aerofoil(file, writer=None, tensorboard=False, dimensions=2):
     """
     show 2D plot of aerofoil from a file
     """
+    file = Path(file)
+
     coordinates = np.loadtxt(file, delimiter=" ", dtype=np.float32, skiprows=1)
 
     fig = plt.figure()
-    plt.plot(coordinates[:, 0], coordinates[:, 1], 'r-')
+    if dimensions == 2:
+        plt.plot(coordinates[:, 0], coordinates[:, 1], 'r-')
+    else:
+        plt.plot(coordinates[:, 1], 'r-')
 
     plt.title(file.parts[-1])
 

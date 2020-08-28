@@ -36,9 +36,7 @@ class AerofoilDataset(Dataset):
 
         # get max ClCd at angle
         with open(self.root_dir / self.aerofoils[item]) as f:
-            line = f.readline()
-            y_vals = [float(num) for num in re.findall(r'[\+-]?\d*\.?\d*', line) if num != '']
-            max_ClCd, angle = y_vals[0], y_vals[1]
+            max_ClCd, angle = [float(num) for num in re.findall(r'[+-]?\d+\.\d+', f.readline()) if num != '']
 
         # get coordinates
         coords = np.loadtxt(self.root_dir / self.aerofoils[item], delimiter=" ", dtype=np.float32, skiprows=1)
@@ -82,9 +80,9 @@ class NormaliseYValues:
         angle_list = []
         for aerofoil in aerofoils:
             with open(dir / aerofoil) as f:
-                outputs = [num for num in re.findall(r'[\+-]?\d*\.?\d*', f.readline()) if num != '']
-                ClCd_list.append(float(outputs[0]))
-                angle_list.append(float(outputs[1]))
+                ClCd, angle = [num for num in re.findall(r'[+-]?\d+\.\d+', f.readline()) if num != '']
+                ClCd_list.append(float(ClCd))
+                angle_list.append(float(angle))
 
         # calculate mean
         self.ClCd_mean = sum(ClCd_list) / len(aerofoils)
