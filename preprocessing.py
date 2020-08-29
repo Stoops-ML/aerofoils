@@ -49,13 +49,21 @@ def split_data(in_files, out_path, train_valid_test_split=None):
             shutil.copyfile(in_files / aerofoil, out_path / 'test' / aerofoil)
 
 
-def aerofoil_redistribution(base_aerofoil, in_files, out_path, dataset=True):
+def aerofoil_redistribution(base_aerofoil, in_files, out_path):
     """
     Redistribute coordinates of all aerofoils such that all aerofoils have the same number of coordinates
     All aerofoils in 'in_files' will have the same x coordinates as 'base_aerofoil'. The y coordinates of all aerofoils
     will be interpolated at their new x coordinates. This is used to remove the x coordinates from the model inputs.
     dataset=True if aerofoil file is to be part of train, valid or test set. If aerofoil is used for prediction:
     dataset=False.
+
+    NOTE:
+        from numpy documentation on np.interp:
+        "The x-coordinate sequence is expected to be increasing, but this is not explicitly enforced. However, if the
+        sequence xp is non-increasing, interpolation results are meaningless."
+        The bottom aerofoil surface has decreasing x coordinates, however the interpolation method still works.
+        There is an error where for even coordinates (if the input is odd, and vice-versa for the other way round)
+        there will be a NaN in the output of the interpolation method at the leading edge of the aerofoil.
     """
     # parameters
     seed(42)
@@ -91,17 +99,6 @@ def aerofoil_redistribution(base_aerofoil, in_files, out_path, dataset=True):
                     continue
                 coordinates[num_mins[1], 0] += 0.00000001  # todo fix this for more than two minimums
 
-
-
-
-
-        # FIX BOTTOM X COORDINATES!!!!!! X VALUES MUST BE INCREASING!!
-
-
-
-
-
-
         # top aerofoil surface
         x_top = coordinates[:min_ind, 0]
         # x_top = x_top[::-1]
@@ -122,8 +119,11 @@ def aerofoil_redistribution(base_aerofoil, in_files, out_path, dataset=True):
         # combine top and bottom surfaces and print file
         x_target = np.append(x_top_target, x_bottom_target)
         y_target = np.append(y_top_target, y_bottom_target)
-        if np.isnan(np.sum(x_target)) or np.isnan(np.sum(y_target)):
-            print(aerofoil)
+
+        # fix files
+        y_target[np.isnan(y_target)] = 0.  # change NaN elements to 0.0
+        y_target[np.isinf(y_target)] = 0.  # change inf elements to 0.0
+        # todo THIS IS A QUICK FIX TO REMOVE NaN FROM y_target. SEE DOC STRING FOR MORE DETAILS ON THIS.
 
         np.savetxt(out_path / aerofoil, np.transpose([x_target, y_target]), header=aerodynamics,
                    fmt='%.6f', comments='')

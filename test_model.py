@@ -4,6 +4,7 @@ from preprocessing import aerofoil_redistribution
 import torch
 from train_model import load_model
 import numpy as np
+from pathlib import Path
 
 
 def test(model, dataloader, dataset, criterion, num_epochs, print_dir, output_size, device='cpu'):
@@ -142,25 +143,28 @@ def heat_map(model, input_size, num_epochs, dataloader=None, sample=None, layer=
         plt.show()
 
 
-def prediction(model, base_aerofoil, aerofoil_file, redistribute_coordinates=True, redistribute_aerofoil_path=None):
+def prediction(checkpoint, device, aerofoil_file, redistribute_coordinates=True, base_aerofoil=None, skiprows=0):
 
     # preprocess aerofoil
+    aerofoil_file = Path(aerofoil_file)
     if redistribute_coordinates:
-        if not redistribute_aerofoil_path:  # overwrite inputted aerofoil
-            redistribute_aerofoil_path = aerofoil_file.parent
-        aerofoil_redistribution(base_aerofoil, aerofoil_file, redistribute_aerofoil_path, dataset=False)
+        aerofoil_redistribution(base_aerofoil, aerofoil_file, aerofoil_file.parent)
 
     # load model
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model, architecture, hyperparameters, extras = load_model('last_checkpoint.pth')
+    model, architecture, _, _ = load_model(checkpoint)
 
     # get coordinates
-    coordinates = np.loadtxt(aerofoil_file, delimiter=" ", dtype=np.float32)
-    x_coordinates = np.array(coordinates[:, 1], dtype=np.float32)  # inputs as ndarrays
+    coordinates = np.loadtxt(aerofoil_file, delimiter=" ", dtype=np.float32, skiprows=skiprows)
+    y_coordinates = np.array(coordinates[:, 1], dtype=np.float32)  # inputs as ndarrays
 
     # convert data to tensor with correct shape
-    x = torch.from_numpy(x_coordinates).view(architecture['num_channels'], architecture['input_size'])
+    x = torch.from_numpy(y_coordinates).view(1, architecture['num_channels'], architecture['input_size'])
+    x = x.to(device)
 
     model.eval()  # turn off batch normalisation and dropout
     with torch.no_grad():  # don't add gradients of test set to computational graph
-        return model(x.float().to(device))  # predictions
+        ClCd, angle = model(x.float())  # predictions
+
+    print(f'max lift-to-drag ratio = {ClCd.numpy()} at angle of attack = {angle.numpy()} degrees')
+
+    return ClCd.numpy(), angle.numpy()

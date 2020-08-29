@@ -64,7 +64,7 @@ def train(model, optimiser, criterion, num_epochs, train_dataset, valid_dataset,
                     # validations set
                     with torch.no_grad():  # don't add gradients to computational graph
                         model.eval()
-                        for valid_input, valid_targets, _ in valid_loader:
+                        for valid_input, valid_targets, aerofoil in valid_loader:
                             # data
                             valid_input = valid_input.to(device)  # y coordinates of aerofoil
                             valid_targets = valid_targets.to(device)  # max ClCd at angle
