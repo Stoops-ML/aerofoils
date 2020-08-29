@@ -141,6 +141,7 @@ def download_aerofoils(out_path, num_outputs=1, overwrite=True):
     coordinates_link = 'http://airfoiltools.com/airfoil/seligdatfile?airfoil='
     aerodynamics_link = 'http://airfoiltools.com/airfoil/details?airfoil='
     out_path = Path(out_path)
+    out_path.mkdir(exist_ok=True)
 
     page = requests.get(aerofoils_link)
     aerofoils_soup = BeautifulSoup(page.content, 'lxml')
